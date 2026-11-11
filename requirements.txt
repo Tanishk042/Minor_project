@@ -1,0 +1,18 @@
+# ForestEar pinned dependencies (Python 3.12; see README "Assumptions")
+tensorflow==2.18.0
+librosa==0.11.0
+soundfile==0.13.1
+scikit-learn==1.7.0
+lightgbm==4.6.0
+pandas==2.3.3
+numpy==2.0.2
+matplotlib==3.10.7
+fastapi==0.129.0
+uvicorn[standard]==0.37.0
+sqlalchemy==2.0.45
+httpx==0.28.1
+pyyaml==6.0.3
+sounddevice==0.5.6
+psutil==7.1.0
+pytest==8.4.2
+m2cgen==0.10.0

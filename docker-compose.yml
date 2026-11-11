@@ -1,0 +1,47 @@
+# ForestEar — full-stack demo composition (optional container layout).
+#
+# The primary workflow runs everything on a laptop (see README Quick start);
+# this file documents how the pieces map to containers if you prefer Docker.
+# The backend serves the dashboard at http://localhost:8000.
+#
+# NOTE: training + evaluation are intentionally NOT containerised here —
+# they are one-shot Makefile workflows (make cache / train / eval) that
+# should run on the host (8 GB RAM, YAMNet cache on disk under data/).
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      # override the dev token in any real deployment
+      FORESTEAR_TOKEN: ${FORESTEAR_TOKEN:-forestear-dev-token}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      # state: events db, alert clips, eval reports read by /reports/*
+      - ./data:/app/data
+      - ./reports:/app/reports
+    restart: unless-stopped
+
+  # One edge agent per node. In the laptop demo the simulator already runs
+  # 4 in-process agents (make demo); this service shows the real-node shape:
+  # point it at the backend service and mount the model artifacts read-only.
+  #
+  # edge-node-01:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.edge
+  #   environment:
+  #     FORESTEAR_NODE_ID: node-01
+  #     FORESTEAR_BACKEND_URL: http://backend:8000
+  #   volumes:
+  #     - ./ml/models_store:/models:ro
+  #     - edge-queue-01:/app/data
+  #   depends_on: [backend]
+  #   restart: unless-stopped
+
+# volumes:
+#   edge-queue-01:

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ForestEar — Acoustic Forest Surveillance</title>
+<meta name="description" content="Real-time acoustic threat and biodiversity telemetry from the forest canopy. Chainsaw, gunshot, vehicle and human detection with weather-suppression — all inference at the edge."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..800;1,6..96,400..800&family=Pinyon+Script&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ============ PRELOADER ============ -->
+<div id="preloader" class="preloader theme_on-color">
+  <div class="preloader_ctn">
+    <div class="preloader_t">
+      <div class="u-48"></div>
+      <div class="preloader_logo">
+        <svg class="logo_symbol" viewBox="0 0 40 40" fill="currentColor" aria-hidden="true">
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4"/>
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(45 20 20)"/>
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(90 20 20)"/>
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(135 20 20)"/>
+          <circle cx="20" cy="20" r="2.1" class="logo_core"/>
+        </svg>
+      </div>
+    </div>
+    <div class="preloader_c">
+      <div class="grid preloader_grid">
+        <div class="preloader_title-l"><div class="c1 a-center">Forest</div></div>
+        <div class="preloader_mid">
+          <div class="h3 a-center">ForestEar</div>
+          <div class="preloader_mid_a"><div class="a2 preloader_a a-center">listening</div></div>
+        </div>
+        <div class="preloader_title-r"><div class="c1 a-center">Ear</div></div>
+      </div>
+    </div>
+    <div class="preloader_b">
+      <div class="grid">
+        <div class="s_title">
+          <div class="preloader_progress"><div class="preloader_progress_fill" id="preloader-fill"></div></div>
+          <div class="u-32"></div>
+          <p class="l1 a-center">ForestEar — the forest, heard.</p>
+        </div>
+      </div>
+      <div class="u-48"></div>
+    </div>
+  </div>
+  <div class="preloader_arch" aria-hidden="true"></div>
+</div>
+
+<!-- ============ HEADER ============ -->
+<header class="header">
+  <div class="header_c">
+    <a class="brand" href="#top" aria-label="ForestEar — back to top">
+      <span class="logo_symbol brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 40 40" fill="currentColor">
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4"/>
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(45 20 20)"/>
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(90 20 20)"/>
+          <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(135 20 20)"/>
+          <circle cx="20" cy="20" r="2.1" class="logo_core"/>
+        </svg>
+      </span>
+      <span class="brand_text">
+        <span class="brand_name l1">ForestEar</span>
+        <span class="brand_tag l2">Acoustic surveillance</span>
+      </span>
+    </a>
+    <nav class="header-nav" role="tablist" aria-label="Dashboard sections">
+      <button class="nav-item tab is-active" data-tab="live" role="tab">
+        <span class="nav-item_label"><span class="nav-item_label_text">Live Ops</span><span class="nav-item_label_text is-2" aria-hidden="true">Live Ops</span></span>
+      </button>
+      <button class="nav-item tab" data-tab="biodiversity" role="tab">
+        <span class="nav-item_label"><span class="nav-item_label_text">Biodiversity</span><span class="nav-item_label_text is-2" aria-hidden="true">Biodiversity</span></span>
+      </button>
+      <button class="nav-item tab" data-tab="analytics" role="tab">
+        <span class="nav-item_label"><span class="nav-item_label_text">Analytics</span><span class="nav-item_label_text is-2" aria-hidden="true">Analytics</span></span>
+      </button>
+    </nav>
+    <div class="header-status">
+      <div class="conn-pill" id="conn-pill"><span class="dot"></span><span class="l2" id="conn-text">connecting</span></div>
+      <div class="l2 clock" id="utc-clock">--:--:-- UTC</div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ MAIN ============ -->
+<main class="main" id="top">
+
+  <!-- ========== TAB: LIVE ========== -->
+  <section class="tab-panel is-active" id="panel-live">
+
+    <!-- masthead — velvet plum, editorial opener -->
+    <div class="section theme_on-color masthead">
+      <div class="container">
+        <div class="masthead_t reveal">
+          <div class="c1 a-center masthead-eyebrow">Acoustic surveillance</div>
+          <div class="u-24"></div>
+          <h1 class="h1 a-center masthead-title">ForestEar</h1>
+          <div class="a1 a-center masthead-script">listening</div>
+          <div class="u-24"></div>
+          <p class="h5 a-center masthead-sub">Real-time threat &amp; biodiversity telemetry from the forest canopy</p>
+        </div>
+        <div class="u-48"></div>
+        <div class="masthead_stats reveal" style="--i:1">
+          <div class="masthead_stat"><div class="h6 num" id="stat-nodes">—</div><div class="l2">Nodes online</div></div>
+          <div class="line-v stats_divider"></div>
+          <div class="masthead_stat"><div class="h6 num" id="stat-events">—</div><div class="l2">Recent events</div></div>
+          <div class="line-v stats_divider"></div>
+          <div class="masthead_stat"><div class="h6 num" id="stat-species">—</div><div class="l2">Species · 48 h</div></div>
+          <div class="line-v stats_divider"></div>
+          <div class="masthead_stat"><div class="h6 num" id="stat-vetoes">—</div><div class="l2">Weather vetoes</div></div>
+        </div>
+        <div class="u-48"></div>
+      </div>
+      <!-- live event ticker -->
+      <div class="marquee" aria-label="Latest events">
+        <div class="marquee_track">
+          <div class="marquee_list" id="ticker-a"><span class="l1 marquee_list_item">awaiting telemetry — the canopy is quiet</span></div>
+          <div class="marquee_list" id="ticker-b" aria-hidden="true"><span class="l1 marquee_list_item">awaiting telemetry — the canopy is quiet</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- map — arch section overlapping the masthead -->
+    <div class="section arch map-section">
+      <div class="container">
+        <div class="s-head reveal">
+          <div class="s_title l1 a-center">Sector map</div>
+          <div class="divider"><div class="line-v"></div></div>
+          <h2 class="h4 a-center">Canopy network</h2>
+          <div class="u-16"></div>
+          <div class="map-legend l2 a-center">
+            <span class="lg"><i class="lg-dot ok"></i>healthy</span>
+            <span class="lg"><i class="lg-dot warn"></i>degraded</span>
+            <span class="lg"><i class="lg-dot bad"></i>offline</span>
+            <span class="lg"><i class="lg-dot est"></i>estimate</span>
+          </div>
+        </div>
+        <div class="u-32"></div>
+        <div class="map-shell reveal" style="--i:1">
+          <div id="map"></div>
+        </div>
+        <div class="u-16"></div>
+        <div class="map-foot l1 a-center num" id="map-foot">awaiting node heartbeats…</div>
+        <div class="u-64"></div>
+      </div>
+    </div>
+
+    <!-- telemetry — scores + spectrogram + health -->
+    <div class="section telemetry-section">
+      <div class="container">
+        <div class="grid telemetry-grid">
+
+          <!-- scores card -->
+          <div class="card reveal">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">Selected node</div>
+                <h3 class="h5 card-title" id="scores-node">—</h3>
+              </div>
+              <div class="node-select">
+                <select id="node-select" class="select l1" aria-label="Select node"></select>
+              </div>
+            </div>
+            <div class="u-24"></div>
+            <div class="scores">
+              <div class="score-row"><span class="l1 score-label">M2 · Gunshot</span><div class="score-bar"><div class="score-fill" id="b-m2"></div></div><span class="l1 num score-val" id="v-m2">0.00</span></div>
+              <div class="score-row"><span class="l1 score-label">M3 · Chainsaw</span><div class="score-bar"><div class="score-fill" id="b-m3"></div></div><span class="l1 num score-val" id="v-m3">0.00</span></div>
+              <div class="score-row"><span class="l1 score-label">M4 · Vehicle</span><div class="score-bar"><div class="score-fill" id="b-m4"></div></div><span class="l1 num score-val" id="v-m4">0.00</span></div>
+              <div class="score-row"><span class="l1 score-label">M5 · Rain</span><div class="score-bar"><div class="score-fill weather" id="b-m5r"></div></div><span class="l1 num score-val" id="v-m5r">0.00</span></div>
+              <div class="score-row"><span class="l1 score-label">M5 · Wind</span><div class="score-bar"><div class="score-fill weather" id="b-m5w"></div></div><span class="l1 num score-val" id="v-m5w">0.00</span></div>
+              <div class="score-row"><span class="l1 score-label">M5 · Thunder</span><div class="score-bar"><div class="score-fill weather" id="b-m5t"></div></div><span class="l1 num score-val" id="v-m5t">0.00</span></div>
+              <div class="score-row"><span class="l1 score-label">M6 · Anomaly z</span><div class="score-bar"><div class="score-fill anomaly" id="b-m6"></div></div><span class="l1 num score-val" id="v-m6">0.0</span></div>
+              <div class="score-row"><span class="l1 score-label">M7 · Human</span><div class="score-bar"><div class="score-fill" id="b-m7"></div></div><span class="l1 num score-val" id="v-m7">0.00</span></div>
+              <div class="score-row score-row--threat"><span class="l1 score-label">M9 · Threat</span><div class="score-bar"><div class="score-fill threat" id="b-m9"></div></div><span class="l1 num score-val" id="v-m9">0.00</span></div>
+            </div>
+            <div class="veto-banner" id="veto-banner" hidden>
+              <svg class="veto-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                <path d="M17.5 18a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.36 9.2 4.5 4.5 0 0 0 7.5 18h10Z"/>
+                <path d="M12 21v-3M8 21l1.5-2.5M16 21l-1.5-2.5"/>
+              </svg>
+              <span class="l1" id="veto-text">Thunder detected → gunshot alert vetoed</span>
+            </div>
+            <div class="spectro-wrap">
+              <canvas id="spectrogram" width="560" height="120"></canvas>
+              <div class="l2 spectro-label">Live mel-spectrogram · 64 bins · 0–7.8 kHz</div>
+            </div>
+          </div>
+
+          <!-- health card -->
+          <div class="card reveal" style="--i:1">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">Network</div>
+                <h3 class="h5 card-title">Node health</h3>
+              </div>
+            </div>
+            <div class="u-24"></div>
+            <div class="health-grid" id="health-grid"></div>
+          </div>
+        </div>
+        <div class="u-96"></div>
+      </div>
+    </div>
+
+    <!-- ranger feed — velvet plum -->
+    <div class="section theme_on-color feed-section">
+      <div class="container">
+        <div class="s-head reveal">
+          <div class="s_title l1 a-center">Ranger feed</div>
+          <div class="divider"><div class="line-v"></div></div>
+          <h2 class="h3 a-center">Alerts &amp; events</h2>
+        </div>
+        <div class="u-48"></div>
+        <div class="feed-filters reveal" style="--i:1">
+          <select id="filter-class" class="select select--dark l1" aria-label="Filter by class">
+            <option value="">all classes</option><option>chainsaw</option><option>gunshot</option><option>vehicle</option><option>human</option><option>anomaly</option>
+          </select>
+          <select id="filter-sev" class="select select--dark l1" aria-label="Filter by severity">
+            <option value="">all severity</option><option>CRITICAL</option><option>WARNING</option><option>INFO</option>
+          </select>
+          <button class="btn btn--dark" id="btn-export"><span class="btn_label">Export CSV</span></button>
+        </div>
+        <div class="u-24"></div>
+        <div class="feed card--dark reveal" id="feed" style="--i:2"></div>
+        <div class="u-96"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== TAB: BIODIVERSITY ========== -->
+  <section class="tab-panel" id="panel-biodiversity">
+    <div class="section">
+      <div class="container">
+        <div class="s-head reveal">
+          <div class="s_title l1 a-center">Dual-use sensing</div>
+          <div class="divider"><div class="line-v"></div></div>
+          <h2 class="h4 a-center">Species heard</h2>
+        </div>
+        <div class="u-48"></div>
+        <div class="grid bio-grid">
+          <div class="card reveal" style="--i:1">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">M8 BirdNET · duty-cycled 1-in-10</div>
+                <h3 class="h5 card-title">Detections</h3>
+              </div>
+              <div class="l2 num" id="bio-total">0 detections</div>
+            </div>
+            <div class="u-24"></div>
+            <div class="species-list" id="species-list"></div>
+          </div>
+          <div class="card reveal" style="--i:2">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">Acoustic activity</div>
+                <h3 class="h5 card-title">By hour of day</h3>
+              </div>
+            </div>
+            <div class="u-24"></div>
+            <div class="chart-wrap"><canvas id="bio-hour-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="u-96"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== TAB: ANALYTICS ========== -->
+  <section class="tab-panel" id="panel-analytics">
+    <div class="section">
+      <div class="container">
+        <div class="s-head reveal">
+          <div class="s_title l1 a-center">Evaluation</div>
+          <div class="divider"><div class="line-v"></div></div>
+          <h2 class="h4 a-center">Measured performance</h2>
+        </div>
+        <div class="u-48"></div>
+        <div class="grid analytics-grid">
+          <div class="card reveal" style="--i:1">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">Live ops</div>
+                <h3 class="h5 card-title">Events by class</h3>
+              </div>
+            </div>
+            <div class="u-24"></div>
+            <div class="chart-wrap"><canvas id="ev-class-chart"></canvas></div>
+          </div>
+          <div class="card reveal" style="--i:2">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">Suppression pipeline</div>
+                <h3 class="h5 card-title">Raised vs suppressed</h3>
+              </div>
+            </div>
+            <div class="u-24"></div>
+            <div class="chart-wrap"><canvas id="ev-sev-chart"></canvas></div>
+          </div>
+          <div class="card card--wide reveal" style="--i:3">
+            <span class="dg dg-tl" aria-hidden="true"></span><span class="dg dg-tr" aria-hidden="true"></span>
+            <span class="dg dg-bl" aria-hidden="true"></span><span class="dg dg-br" aria-hidden="true"></span>
+            <div class="card-head">
+              <div>
+                <div class="l2 card-eyebrow">From reports/ · held-out test fold</div>
+                <h3 class="h5 card-title">Ensemble vs baselines</h3>
+              </div>
+              <button class="btn" id="btn-load-eval"><span class="btn_label">Load ablation.json</span></button>
+            </div>
+            <div class="u-24"></div>
+            <div class="chart-wrap"><canvas id="ablation-chart"></canvas></div>
+            <div class="l2 muted ablation-note" id="ablation-note">Ablation table appears here after evaluation runs (make eval).</div>
+          </div>
+        </div>
+        <div class="u-96"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- footer -->
+  <footer class="section theme_on-dark footer">
+    <div class="container">
+      <div class="footer_c">
+        <div class="footer_logo">
+          <svg class="logo_symbol" viewBox="0 0 40 40" fill="currentColor" aria-hidden="true">
+            <ellipse cx="20" cy="20" rx="2.6" ry="9.4"/>
+            <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(45 20 20)"/>
+            <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(90 20 20)"/>
+            <ellipse cx="20" cy="20" rx="2.6" ry="9.4" transform="rotate(135 20 20)"/>
+            <circle cx="20" cy="20" r="2.1" class="logo_core"/>
+          </svg>
+          <div class="h2 a-center footer_title">ForestEar</div>
+        </div>
+        <div class="u-24"></div>
+        <p class="l1 a-center">Edge inference only — no audio leaves the node</p>
+        <div class="u-8"></div>
+        <p class="l1 a-center muted">Final-year ECE minor project · 9-model ensemble · TDOA localization</p>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<!-- ============ TOASTS ============ -->
+<div class="toasts" id="toasts"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# data & models (regenerable via make targets; never commit datasets)
+data/
+!data/.gitkeep
+
+# pretrained artifact stores (downloaded by scripts/download_data.py)
+models_store/
+ml/models_store/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# environments / OS
+.venv/
+.DS_Store
+
+# scratch
+*.log
+nohup.out

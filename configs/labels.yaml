@@ -1,0 +1,72 @@
+# ForestEar class taxonomy and dataset -> label mapping.
+# The live system emits these five final classes (M9 output).
+
+final_classes:
+  - chainsaw
+  - gunshot
+  - vehicle
+  - human
+  - benign
+
+severity_map:
+  chainsaw: WARNING
+  gunshot: CRITICAL
+  vehicle: WARNING
+  human: INFO
+  benign: NONE
+
+# M5 weather classes (false-alarm suppressor)
+weather_classes:
+  - rain
+  - wind
+  - thunder
+  - quiet
+
+# ---------------------------------------------------------------------------
+# dataset -> ForestEar mapping
+# ESC-50 categories (karolpiczak/ESC-50, CC-BY-NC) - verified names from esc50.csv.
+# NOTE: ESC-50 has NO gunshot class; gunshot data comes from UrbanSound8K/FSD50K.
+# fireworks + hand_saw + church_bells are kept BENIGN on purpose: they are the
+# classic gunshot/chainsaw confusers the ensemble must survive.
+esc50:
+  chainsaw: [chainsaw]
+  vehicle: [engine, helicopter, airplane, train, car_horn, siren]
+  human: [footsteps, breathing, coughing, laughing, crying_baby, snoring,
+          sneezing, drinking_sipping, clapping]
+  weather:
+    rain: [rain]
+    wind: [wind]
+    thunder: [thunderstorm]
+  benign: [chirping_birds, crow, rooster, hen, frog, insects, crickets,
+           crackling_fire, sea_waves, pouring_water, water_drops, dog, cat,
+           sheep, cow, pig, vacuum_cleaner, washing_machine, clock_tick,
+           door_wood_knock, can_opening, mouse_click, keyboard_typing,
+           brushing_teeth, toilet_flush, church_bells, hand_saw,
+           glass_breaking, fireworks, door_wood_creaks]
+
+# UrbanSound8K (CC-BY-NC-SA-like research license; class IDs from its metadata)
+urbansound8k:
+  gunshot: [gun_shot]
+  vehicle: [engine_idling, car_horn]
+  human: [children_playing]
+  benign: [air_conditioner, drilling, jackhammer, siren, street_music, dog_bark]
+
+# FSD50K labels (verified against the mirror's vocabulary.csv; clips dev/eval,
+# dev additionally carries train/val split column used by build_dataset.py).
+# NOTE: FSD50K has no "Chainsaw" label -> chainsaw comes from ESC-50 + synthetic.
+fsd50k:
+  gunshot: ["Gunshot_and_gunfire"]
+  vehicle: ["Motorcycle", "Truck", "Motor_vehicle_(road)"]
+  human: ["Speech", "Chatter", "Walk_and_footsteps", "Shout", "Yell", "Screaming"]
+  weather:
+    rain: ["Rain"]
+    wind: ["Wind"]
+    thunder: ["Thunderstorm"]
+  benign: ["Bird", "Chirp_and_tweet", "Cricket", "Frog", "Stream"]
+
+# synthetic generator (fallback when downloads fail)
+synthetic:
+  gunshot: [gunshot_impulse]
+  chainsaw: [chainsaw_engine]
+  vehicle: [vehicle_engine]
+  human: [voice_like_formants]
