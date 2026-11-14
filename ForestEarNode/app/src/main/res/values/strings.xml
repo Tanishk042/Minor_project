@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">ForestEar Node</string>
+    <string name="notification_channel_name">ForestEar Node service</string>
+    <string name="notification_channel_desc">Acoustic monitoring foreground service</string>
+    <string name="notification_title">ForestEar Node is listening</string>
+    <string name="notification_text">Acoustic monitoring active</string>
+    <string name="notification_mic_paused">Microphone paused — open the app to resume</string>
+    <string name="notification_stop">Stop</string>
+</resources>
