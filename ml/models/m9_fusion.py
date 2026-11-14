@@ -87,13 +87,24 @@ class M9LightGBM:
         self.classes = classes or ["chainsaw", "gunshot", "vehicle", "human", "benign"]
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """(n, n_features) -> calibrated (n, 5) class probabilities."""
-        raw = self.model.predict(X.astype(np.float64))
-        out = np.asarray(raw, dtype=np.float64)
-        if out.ndim == 1:  # single estimator per class
-            out = out.reshape(1, -1)
+        """(n, n_features) -> calibrated (n, k) class probabilities.
+
+        self.model is an LGBMClassifier as trained by train_m9_fusion.py:
+        .predict() would return CLASS LABELS (n,), .predict_proba() returns
+        the (n, k) probability matrix we actually want.
+        """
+        X = np.asarray(X, dtype=np.float64)
+        single = X.ndim == 1
+        if single:
+            X = X[None, :]
+        if hasattr(self.model, "predict_proba"):   # LGBMClassifier (deployed)
+            out = np.asarray(self.model.predict_proba(X), dtype=np.float64)
+        else:                                       # raw Booster: (n, k)
+            out = np.asarray(self.model.predict(X), dtype=np.float64)
+        if out.ndim == 1:                           # binary single column
+            out = np.stack([1.0 - out, out], axis=1)
         # isotonic calibration per class column
-        for j, cls in enumerate(self.classes):
+        for j, cls in enumerate(self.classes[:out.shape[1]]):
             cal = self.calibrators.get(cls)
             if cal is not None:
                 out[:, j] = np.clip(cal.predict(out[:, j]), 0.0, 1.0)

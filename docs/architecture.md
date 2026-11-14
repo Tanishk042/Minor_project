@@ -68,6 +68,12 @@ Same-class events within 6 s across nodes are grouped:
 - **≥ 3 nodes** — Gauss-Newton TDOA in a local ENU frame (speed of sound
   343 m/s). Multi-start detects the two-fold 3-node hyperbola ambiguity
   and inflates the radius to cover both solutions; 4+ nodes are unique.
+  A fit with median residual > 40 m (clock jitter / inconsistent arrivals)
+  is rejected instead of publishing a meaningless point, and a solution
+  > 25 km from the array centroid is refused. The same shot is estimated
+  again each time another node reports it, so `_maybe_correlate` keeps one
+  row per shot within ±6 s and replaces it when a later fit uses more
+  nodes (3-node subset → 4-node).
 - **2 nodes** — hyperbola bearing band (honest: radius = node separation).
 - **1 node** — coarse inverse-square radius from received RMS, labelled
   `single` (never drawn as a position claim on the map).
@@ -113,22 +119,37 @@ cache builder re-checks at build time.
 
 ### M9 stacking (no leakage)
 
-`train_m9_fusion.py` computes **out-of-fold** predictions for M2–M7 on the
-train+val folds via K-fold; only those OOF vectors (plus non-model
-features) train the LightGBM. The test split is touched exactly once, at
-`evaluate.py`. Isotonic calibration is fit on a val-fold slice.
+`train_m2_m7.py` fits M2–M7 on the **train** split only. `train_m9_fusion.py`
+then runs those frozen models over the **val** split — data none of them ever
+trained on — so their outputs there are out-of-fold (OOF) predictions. The
+M9 LightGBM fits a stratified 75 % slice of that OOF(val) feature matrix;
+per-class isotonic calibration is fit on the held-out 25 % (same seed,
+same split as the deployed artifact). The test split is touched exactly
+once, by `scripts/evaluate.py`. Evaluation-time ablations (`ablation.json`)
+retrain LightGBM with a feature group zeroed, following this exact protocol,
+so they are comparable to the deployed M9.
 
 ## 3. Simulator (`simulator/`)
 
 `forest_sim.py` renders each virtual node's microphone: real dataset clips
-(test-fold preferred) attenuated by distance (inverse-square + HF roll-off
-`max(400, 8000−30d)`) with propagation delay `d/343`, mixed over synthetic
-forest ambience and occasional gusts. Per-node clock offsets are injected
-via the scenario YAML. `run_nodes.py` wires each node to an in-process
-`EdgeAgent` (own decision state, own offline queue) against a real backend
-so the demo exercises the full stack — ingest, correlation, alerts,
-dashboard. Ground truth per source (active interval + position) is written
-to `data/sim/<scenario>/ground_truth.csv`.
+(test-fold preferred) attenuated by distance (inverse-square + causal
+one-pole HF roll-off `max(1200, 9000−9d)`) with propagation delay `d/343`,
+mixed over synthetic forest ambience and occasional gusts. Sources with
+`clip_select: sustained` (used by `vehicle_track`) audition eight candidate
+clips and keep the one whose *quietest* 0.5 s window is loudest, so a looped
+pass-by recording cannot silently drop out at an arbitrary scenario time.
+The lowpass is causal with per-source state carried across hops: a zero-phase
+FFT filter pre-rings, which leaked energy before an impulse's true onset and
+corrupted TDOA. Each node builds its 1 s analysis window from consecutive
+0.5 s hops (no zero padding), and the edge agent refines each event timestamp
+to the impulsive onset inside that window (4 ms RMS envelope, anchored on the
+loudest frame, walked back to the attack) so cross-node arrival times are
+comparable. Sources are silent before their first trajectory point.
+Per-node clock offsets are injected via the scenario YAML. `run_nodes.py`
+wires each node to an in-process `EdgeAgent` (own decision state, own
+offline queue) against a real backend so the demo exercises the full stack —
+ingest, correlation, alerts, dashboard. Ground truth per source (active
+interval + position) is written to `data/sim/<scenario>/ground_truth.csv`.
 
 ## 4. Backend details
 

@@ -94,10 +94,12 @@ Common conventions for all trained models:
   · M6 z · M7 · 6 handcrafted (rms_db, crest, spectral flux/flatness,
   onset strength, zcr) · 18 temporal context features (mean/max/slope of
   6 tracked scores over the last 5 windows) · hour-of-day sin/cos.
-- **Training**: out-of-fold stacking — M2–M7 predictions on train+val are
-  generated K-fold OOF, so LightGBM never sees predictions a model made on
-  its own training rows. Isotonic calibration per class is fit on a val
-  slice; ECE/Brier before/after is reported in `reports/calibration.json`.
+- **Training**: out-of-fold stacking — M2–M7 are fit on the train split
+  only; their predictions on the **val** split (never trained on) form the
+  OOF feature matrix, so LightGBM never sees a model's prediction on its
+  own training rows. LightGBM fits a stratified 75 % slice of OOF(val);
+  per-class isotonic calibration is fit on the held-out 25 %. ECE/Brier
+  before/after is reported in `reports/calibration.json`.
 - **Export**: LightGBM pickle + m2cgen pure-Python translation (edge,
   no LightGBM dependency) + Keras MLP alternative (TFLite).
 - **Classes**: chainsaw / gunshot / vehicle / human / benign.

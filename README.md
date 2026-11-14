@@ -52,7 +52,7 @@ make eval           # full evaluation -> reports/ (JSON + summary.md)
 
 make backend        # FastAPI + dashboard at http://127.0.0.1:8000
 make demo           # 4 virtual forest nodes -> backend (needs `make train`)
-make test           # pytest suite (99 tests)
+make test           # pytest suite (106 tests)
 ```
 
 `make data` needs ~2 GB and a few minutes (parallel downloads, resumable).
@@ -78,11 +78,11 @@ make agent-file F=path/to/file.wav      # replay a wav file or directory
 | scenario | what it proves |
 |----------|----------------|
 | `chainsaw_approach` | k-of-n persistence, chainsaw WARNING → sustained CRITICAL escalation |
-| `gunfire_burst` | 3+ node TDOA localisation of impulsive shots |
-| `thunderstorm_with_distant_thunder` | **must not** raise a gunshot alert (weather veto) |
+| `gunfire_burst` | 3+ node TDOA localisation of impulsive shots (six impulses → three cooldown-limited alerts, 11 m error, 29 m radius) |
+| `thunderstorm_with_distant_thunder` | **must not** raise a gunshot alert (loud thunder, no false alarm; veto path unit-tested) |
 | `rainstorm_with_chainsaw` | **must not** over-veto a real chainsaw in rain |
 | `poacher_party` | humans + vehicle + gunshot composite event |
-| `vehicle_track` | vehicle persistence through Doppler/attenuation |
+| `vehicle_track` | vehicle persistence as a real clip passes from ~760 m to ~11 m and away again: two WARNINGs (node-03 at 41 m, node-01 at 11 m), each 3/5 |
 | `quiet_day` | zero false alarms on benign ambience (biodiversity only) |
 
 Virtual nodes get per-node clock offsets, distance attenuation, HF roll-off
@@ -116,6 +116,46 @@ with expandable per-model detail, thunder-veto feed, biodiversity tab with
 species list + hourly Chart.js charts, analytics tab (loads
 `reports/*.json`), event ticker and health grid.
 
+## Phone node (Android)
+
+`android/ForestEarNode/` is a second, fully on-phone implementation of the
+edge agent for one retired **OnePlus Nord CE 2 Lite 5G**. It runs the same
+9 models with TFLite, the same feature contract and the same decision logic;
+the Python code remains the reference and the Android code is parity-tested
+against it.
+
+- **All inference is local.** Network carries JSON alerts/heartbeats (and, if
+  explicitly enabled, raw PCM for debugging). No speech is stored or sent.
+- **9-model pipeline**: YAMNet + gunshot/chainsaw/vehicle/human heads +
+  weather CNN + anomaly AE + duty-cycled BirdNET + M9 tree ensemble with
+  isotonic calibration.
+- **Reliability**: foreground service, wake lock, boot receiver, WorkManager +
+  AlarmManager watchdog, task-removal restart, battery-exemption wizard,
+  thermal governor, low-battery modes, battery CSV, heartbeat telemetry.
+- **Field features**: built-in vs USB-C/TRRS headset mic selection and
+  calibration, dual-SIM SMS fallback for CRITICAL events, opt-in ambient
+  collection with human-presence deletion, raw PCM WebSocket, self-test,
+  CPU-vs-GPU benchmark and a 24 h soak report.
+- **UI**: Compose app with Status / Setup / Diagnose / Settings / Tools.
+
+Build and test:
+
+```bash
+cd android/ForestEarNode
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk-21.jdk/Contents/Home
+./gradlew :app:testDebugUnitTest     # 11 JVM parity/config/decision tests
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Measured JVM parity (this checkout): log-mel max abs diff **1.01e-6**,
+handcrafted **2.88e-8**, M9 trees **1.11e-16** vs Python. Instrumented
+on-phone parity/latency tests are written but **have not been run** here, so
+no phone latency number is claimed. See
+[`android/ForestEarNode/README.md`](../android/ForestEarNode/README.md),
+[`docs/phone_setup_nord_ce2_lite.md`](docs/phone_setup_nord_ce2_lite.md) and
+[`docs/HARDWARE.md`](docs/HARDWARE.md).
+
 ## Repository layout
 
 ```
@@ -127,8 +167,12 @@ backend/                 FastAPI app, correlator (TDOA), alerts (Telegram), ORM
 simulator/               forest simulator + 7 scenario YAMLs
 scripts/                 download_data, build_dataset, make_background_bank, evaluate, smoke_ingest
 dashboard/               ERA-style single-page UI (no build step)
-tests/                   pytest suite (features, decision, TDOA, API, transport, splits, metrics)
-docs/                    architecture.md, model_cards.md, demo_script.md
+tests/                   pytest suite (features, decision, TDOA, API, transport, splits, metrics, simulator)
+docs/                    architecture.md, model_cards.md, demo_script.md,
+                         phone_setup_nord_ce2_lite.md, HARDWARE.md
+../android/ForestEarNode/  Kotlin/Compose phone node (9 models on-device)
+../android/scripts/        adb install/self-test/soak/collection helpers
+../android/tools/          asset exporter + raw PCM WebSocket receiver
 ```
 
 ## Assumptions (deviations from the original spec, made deliberately)
@@ -158,6 +202,14 @@ docs/                    architecture.md, model_cards.md, demo_script.md
    via `FORESTEAR_TOKEN`. No secrets are stored in the repo.
 9. Fixed seeds everywhere (`training.seed: 42`, per-window deterministic
    hashes) — reruns are reproducible up to TF/CPU non-determinism.
+10. **The Android app compiles/targets SDK 34 while the target phone runs
+    Android 13.** Android 14 foreground-service microphone rules are
+    implemented defensively (start as `dataSync`, upgrade to `microphone` when
+    the activity is visible) so the same APK is valid on both.
+11. **M9 on Android is a generated tree ensemble**, not the Python LightGBM
+    pickle: `android/tools/export_android_assets.py` serialises the trees and
+    isotonic calibrators to `config/m9_trees.bin` + JSON, and a JVM test
+    compares the result with native `predict_proba` (max abs diff 1.11e-16).
 
 ## Limitations (what this is not)
 
@@ -167,8 +219,10 @@ docs/                    architecture.md, model_cards.md, demo_script.md
   1 s windows). Numbers in `reports/summary.md` are honest for *this*
   dataset split, not benchmarks against literature.
 - **3-node TDOA is two-fold ambiguous** (hyperbola intersection): the
-  correlator multi-starts and inflates the reported radius to cover both
-  solutions when it detects the ambiguity; 4+ nodes resolve it.
+  correlator multi-starts, keeps the lowest-residual solution and inflates
+  the reported radius to cover the alternative when both fit; 4+ nodes
+  resolve it. A fit with median residual > 40 m (bad geometry, clock
+  skew) is refused rather than published.
 - **Clock synchronisation is simulated** (known offsets); real deployments
   need NTP/PTP discipline for metre-level TDOA.
 - **M6 anomaly detection is open-set by construction** and will also flag
@@ -180,6 +234,18 @@ docs/                    architecture.md, model_cards.md, demo_script.md
   never persisted) — dashboards show what arrives while they are open.
 - Battery/CPU numbers in heartbeats come from `psutil` on the host machine,
   not a real sensor board.
+- **The Android port is parity-tested on the JVM but not yet benchmarked on the
+  physical phone.** Instrumented pipeline/latency tests and the 24 h soak are
+  included; run them on the device before quoting phone numbers. The 5.56 ms
+  figure is the Python laptop pipeline, not the phone.
+- **Synthetic golden gunshot is out-of-distribution for M9**: M2 scores 0.906
+  on that impulse while M9 gives gunshot 0.131 / benign 0.869. The Python
+  pipeline produces the same result, so this is a property of the synthetic
+  fixture, not an Android bug. Real gunshot clips in the test split are what
+  the 0.8186 macro-F1 refers to.
+- **The phone microphone is not characterised**, and built-in processing can
+  differ from training data when `UNPROCESSED` is unavailable. The calibration
+  screen reports the actual source and effect state.
 - The dashboard design intentionally mirrors the aesthetics of
   era-residence.com (typography-inspired stand-ins, no assets copied) as an
   exercise in editorial UI design.

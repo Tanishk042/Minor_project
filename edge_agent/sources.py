@@ -5,6 +5,7 @@ shared clock. Sources handle: mic unplugged, clipping, silence, file end.
 """
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import queue
 import time
@@ -19,6 +20,11 @@ log = logging.getLogger("forestear.sources")
 SR = 16000
 WINDOW = SR          # 1.0 s
 HOP = SR // 2        # 0.5 s
+
+# One clock base for every simulated node in this process. Creating it per
+# SimSource would offset nodes by however long their model load took (seconds),
+# which would make cross-node TDOA meaningless.
+SIM_EPOCH = dt.datetime.now(dt.timezone.utc)
 
 
 class BaseSource:
@@ -42,7 +48,10 @@ class BaseSource:
             w = self.read_hop()
             if w is None:
                 continue
-            ts = dt.datetime.now(dt.timezone.utc).isoformat()
+            # Sources that know the true capture time (the simulator) expose
+            # last_ts; wall clock is only the fallback for mic/file replay.
+            ts = getattr(self, "last_ts", None) or \
+                dt.datetime.now(dt.timezone.utc).isoformat()
             silent = rms_db(w) < self.silence_db
             clipping = clipping_ratio(w, self.clip_ratio) > 0.01
             yield ts, w, silent, clipping
@@ -148,6 +157,14 @@ class SimSource(BaseSource):
         self.pace_realtime = pace_realtime
         self.done = False
         self._sim_time = 0.0
+        self.last_ts: str | None = None
+        # all nodes share this epoch so their timestamps are comparable
+        self._epoch = SIM_EPOCH
+        # Rolling 1.0 s window built from 0.5 s hops. Padding each hop with
+        # zeros (the old behaviour) left half of every analysis window silent
+        # and could push an impulsive onset out of the window entirely for a
+        # distant node, which broke both detection and TDOA.
+        self._tail = np.zeros(WINDOW - HOP, dtype=np.float32)
 
     def push(self, win: np.ndarray, sim_t: float) -> None:
         self._sim_time = sim_t
@@ -161,10 +178,18 @@ class SimSource(BaseSource):
 
     def read_hop(self) -> np.ndarray | None:
         try:
-            sim_t, w = self.q.get(timeout=0.5)
+            sim_t, hop = self.q.get(timeout=0.5)
             self._sim_time = sim_t
-            if len(w) < WINDOW:
-                w = np.pad(w, (0, WINDOW - len(w)))
-            return w
+            # The hop covers [sim_t, sim_t + 0.5 s); the 1.0 s window that
+            # ends at sim_t + 0.5 s starts at sim_t - 0.5 s.
+            self.last_ts = (self._epoch
+                            + dt.timedelta(seconds=sim_t - (WINDOW - HOP) / SR)
+                            ).isoformat()
+            hop = np.asarray(hop, dtype=np.float32)
+            if len(hop) < HOP:
+                hop = np.pad(hop, (0, HOP - len(hop)))
+            w = np.concatenate([self._tail, hop[:HOP]])
+            self._tail = hop[:HOP].copy()
+            return w.astype(np.float32, copy=False)
         except queue.Empty:
             return None

@@ -32,6 +32,37 @@ from edge_agent.zoo import ModelZoo  # noqa: E402
 log = logging.getLogger("forestear.agent")
 
 
+def onset_offset_s(wav: np.ndarray) -> float:
+    """Offset (seconds) of an impulsive onset inside a 1 s window, else 0.0.
+
+    Cross-node TDOA needs the *arrival* time of the same transient, not the
+    0.5 s hop grid. A raw-sample threshold on the window peak is fragile:
+    ambient noise and wind gusts can cross it before the true onset. Instead
+    use a 4 ms short-time RMS envelope, anchor on its loudest frame and walk
+    backwards while the envelope stays above 15% of that peak (or 6x the noise
+    floor). This finds the attack of the loudest transient rather than the
+    first unrelated burst of energy in the window.
+    """
+    a = np.abs(np.asarray(wav, dtype=np.float32))
+    frame = 64                         # 4 ms at 16 kHz
+    nf = a.size // frame
+    if nf < 4:
+        return 0.0
+    rms = np.sqrt(np.mean(a[: nf * frame].reshape(nf, frame) ** 2, axis=1)
+                  + 1e-20)
+    floor = float(np.percentile(rms, 20))
+    peak_idx = int(np.argmax(rms))
+    peak = float(rms[peak_idx])
+    if peak < max(1e-4, 4.0 * floor):
+        return 0.0                     # not impulsive
+    thresh = max(6.0 * floor, 0.15 * peak)
+    i = peak_idx
+    while i > 0 and rms[i - 1] >= thresh:
+        i -= 1
+    idx = max(0, i * frame - frame // 2)
+    return idx / 16000.0
+
+
 class EdgeAgent:
     def __init__(self, source, node_id: str | None = None,
                  backend_url: str | None = None, lat: float | None = None,
@@ -77,7 +108,7 @@ class EdgeAgent:
             m5_thunder=result.m5.get("thunder", 0.0),
             m9=result.m9_probs, rms_db=result.rms_db,
         )
-        decisions = self.decision.update(s)
+        decisions = self.decision.update(s, t=self._sim_seconds(ts))
         fired = None
         for d in decisions:
             if d.fired:
@@ -122,12 +153,17 @@ class EdgeAgent:
         }, timeout=2.0)
 
     def _emit_event(self, ts, wav, d, result) -> dict:
+        # Impulsive events: refine the capture timestamp to the onset sample so
+        # cross-node TDOA sees millisecond arrival differences instead of the
+        # 0.5 s hop grid. Only gunshot is localised, and its energy is impulsive.
+        if d.cls == "gunshot":
+            ts = self._onset_ts(ts, wav)
         payload = {
             "node_id": self.node_id,
             "timestamp_utc": ts,
             "lat": self.lat, "lon": self.lon,
             "class": d.cls, "severity": d.severity,
-            "confidence": round(float(d.conf), 3),
+            "confidence": round(float(d.confidence), 3),
             "per_model_scores": {
                 "m1_selected": {k: round(v, 3) for k, v in result.m1_scores.items()},
                 "m2_gunshot": round(result.m2, 3),
@@ -156,20 +192,45 @@ class EdgeAgent:
         payload["compact_bytes"] = len(compact_payload(payload).encode())
         ok = self.transport.send_event(payload)
         log.info("EVENT %s/%s conf=%.2f %s%s%s",
-                 d.cls, d.severity, d.conf, d.k_of_n,
+                 d.cls, d.severity, d.confidence, d.k_of_n,
                  " [ESCALATED]" if d.escalated else "",
                  "" if ok else " [QUEUED OFFLINE]")
         return payload
 
+    def _sim_seconds(self, ts: str) -> float:
+        """Decision clock: the capture timestamp, not the wall clock.
+
+        In accelerated simulator runs (and file replay) wall-clock time is not
+        the audio timeline; using it would make k-of-n persistence and
+        cooldowns meaningless.
+        """
+        import datetime as dt
+        try:
+            return dt.datetime.fromisoformat(ts).timestamp()
+        except ValueError:
+            return time.time()
+
+    def _onset_ts(self, ts: str, wav: np.ndarray) -> str:
+        """Refine the capture timestamp to the impulsive onset inside the window."""
+        import datetime as dt
+        off = onset_offset_s(wav)
+        if off <= 0.0:
+            return ts
+        try:
+            base = dt.datetime.fromisoformat(ts)
+        except ValueError:
+            return ts
+        return (base + dt.timedelta(seconds=off)).isoformat()
+
     def _emit_suppressed(self, ts, d, result):
         payload = {
             "node_id": self.node_id, "timestamp_utc": ts,
-            "class": d.cls, "confidence": round(float(d.conf), 3),
+            "class": d.cls, "confidence": round(float(d.confidence), 3),
             "suppressed_by": d.suppressed_by,
             "rms_db": round(result.rms_db, 1),
         }
         self.transport._post("/ingest/suppressed", payload)
-        log.info("SUPPRESSED %s conf=%.2f by %s", d.cls, d.conf, d.suppressed_by)
+        log.info("SUPPRESSED %s conf=%.2f by %s", d.cls, d.confidence, d.suppressed_by)
 
     # ------------------------------------------------------------------
     def run(self, max_windows: int | None = None):

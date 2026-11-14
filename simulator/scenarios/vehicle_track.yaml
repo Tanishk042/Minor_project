@@ -6,6 +6,7 @@ ambience:
 sources:
 - id: veh1
   class: vehicle
+  clip_select: sustained    # pick a continuous engine clip (not a pass-by with silence)
   trajectory:
   - - 15.0
     - 12.9716

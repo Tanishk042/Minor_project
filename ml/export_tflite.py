@@ -22,9 +22,27 @@ sys.path.insert(0, str(REPO))
 
 from common.config import load_config, models_dir, reports_dir  # noqa: E402
 from common.logging_setup import setup_logging  # noqa: E402
+from ml.models.m3_m4_m7_heads import M7_EXTRA_CLASSES  # noqa: E402
+from ml.models.m9_fusion import N_FEATURES  # noqa: E402
 from ml.window_cache import WindowCache  # noqa: E402
 
 log = logging.getLogger("forestear.export")
+
+
+def _inputs(cache: WindowCache, mode: str, idx: np.ndarray) -> np.ndarray:
+    """Build the exact input matrix each model sees at inference time."""
+    if mode == "logmel":
+        return cache.logmel_tf(idx)
+    if mode == "emb":
+        return cache.X_emb[idx]
+    if mode == "emb+extra":
+        sel = load_config()["features"]["yamnet_selected_classes"]
+        extra = np.zeros((len(idx), len(M7_EXTRA_CLASSES)), dtype=np.float32)
+        for j, cn in enumerate(M7_EXTRA_CLASSES):
+            if cn in sel:
+                extra[:, j] = cache.X_m1[idx, sel.index(cn)]
+        return np.concatenate([cache.X_emb[idx], extra], axis=1)
+    raise ValueError(f"unknown export mode {mode!r}")
 
 
 def _rep_dataset(cache: WindowCache, mode: str, n: int = 64) -> np.ndarray:
@@ -32,11 +50,7 @@ def _rep_dataset(cache: WindowCache, mode: str, n: int = 64) -> np.ndarray:
     idx = cache.subset("train")
     rng = np.random.default_rng(0)
     take = rng.choice(idx, size=min(n, len(idx)), replace=False)
-    if mode == "logmel":
-        x = cache.logmel_tf(take)
-    else:
-        x = cache.X_emb[take]
-    for row in x:
+    for row in _inputs(cache, mode, take):
         yield [row[None].astype(np.float32)]
 
 
@@ -56,20 +70,14 @@ def export_one(name: str, mode: str, quant: str, cache: WindowCache) -> dict:
         conv.inference_output_type = tf.int8
     elif quant == "float16":
         conv.optimizations = [tf.lite.Optimize.DEFAULT]
-        conv.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
-                                          tf.lite.OpsSet.SELECT_TF_OPS
-                                          ] if False else [tf.lite.OpsSet.TFLITE_BUILTINS]
+        conv.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
         conv.target_spec.supported_types = [tf.float16]
     tfl = conv.convert()
     tfl_path.write_bytes(tfl)
 
     # parity check vs Keras on val windows
-    if mode == "logmel":
-        idx = cache.subset("val")[:32]
-        x = cache.logmel_tf(idx)
-    else:
-        idx = cache.subset("val")[:32]
-        x = cache.X_emb[idx]
+    idx = cache.subset("val")[:32]
+    x = _inputs(cache, mode, idx)
     yk = model.predict(x, verbose=0)
     # tflite inference
     it = tf.lite.Interpreter(model_path=str(tfl_path), num_threads=2)
@@ -94,7 +102,9 @@ def export_one(name: str, mode: str, quant: str, cache: WindowCache) -> dict:
         return o.reshape(yk[0].shape)
 
     yq = np.stack([run_one(r) for r in x[:16]])
-    max_abs = float(np.max(np.abs(yk[:16] - yq))) if yq.size else 0.0
+    diff = np.abs(yk[:16] - yq)
+    max_abs = float(np.max(diff)) if yq.size else 0.0
+    mean_abs = float(np.mean(diff)) if yq.size else 0.0
     corr = float(np.corrcoef(yk[:16].reshape(len(yq), -1).mean(1),
                              yq.reshape(len(yq), -1).mean(1))[0, 1]) \
         if len(yq) > 1 else 1.0
@@ -116,7 +126,7 @@ def export_one(name: str, mode: str, quant: str, cache: WindowCache) -> dict:
 
     return {"model": name, "quant": quant, "kb": tfl_path.stat().st_size // 1024,
             "latency_ms": round(lat, 2), "parity_max_abs": round(max_abs, 4),
-            "parity_corr": round(corr, 4)}
+            "parity_mean_abs": round(mean_abs, 4), "parity_corr": round(corr, 4)}
 
 
 def main() -> int:
@@ -128,11 +138,12 @@ def main() -> int:
     cache = WindowCache()
     jobs = [
         ("m2_gunshot", "logmel", "int8"),
-        ("m5_weather", "logmel", "int8"),
+        # m5 int8 destroyed parity (corr -0.15) -> float16 (documented)
+        ("m5_weather", "logmel", "float16"),
         ("m6_anomaly", "logmel", "float16"),
         ("m3_chainsaw", "emb", "float16"),
         ("m4_vehicle", "emb", "float16"),
-        ("m7_human", "emb", "float16"),
+        ("m7_human", "emb+extra", "float16"),
     ]
     results = []
     for name, mode, quant in jobs:
@@ -167,9 +178,23 @@ def main() -> int:
             it.invoke()
         lat = (time.perf_counter() - t0) / 100 * 1e3
         results.append({"model": "m9_fusion_mlp", "quant": "float16", "kb": size,
-                        "latency_ms": round(lat, 2)})
+                        "latency_ms": round(lat, 3)})
     else:
         log.info("M9 MLP not trained yet (LightGBM is the primary M9)")
+
+    # M9 LightGBM (primary fusion path) latency
+    m9p = models_dir("m9_fusion") / "m9_lgbm.pkl"
+    if m9p.exists():
+        from ml.models.m9_fusion import M9LightGBM
+        m9 = M9LightGBM.load(m9p)
+        feat = np.zeros((1, N_FEATURES), np.float32)
+        for _ in range(5):
+            m9.predict_proba(feat)
+        t0 = time.perf_counter()
+        for _ in range(100):
+            m9.predict_proba(feat)
+        results.append({"model": "m9_fusion_lgbm", "quant": "none (python)",
+                        "latency_ms": round((time.perf_counter() - t0) / 100 * 1e3, 3)})
 
     # M1 latency benchmark (TFLite)
     from ml.features import YamNet
@@ -204,7 +229,8 @@ def main() -> int:
 
     total = sum(r.get("latency_ms", 0) for r in results
                 if r["model"] not in ("m8_birdnet", "m9_fusion_mlp"))
-    results.append({"model": "TOTAL (m1..m7 per hop)", "latency_ms": round(total, 2),
+    results.append({"model": "TOTAL (deployed edge path, per hop)",
+                    "latency_ms": round(total, 2),
                     "target_ms": cfg["export"]["latency_target_ms"],
                     "meets_target": total < cfg["export"]["latency_target_ms"]})
     path = reports_dir() / "edge_performance.json"

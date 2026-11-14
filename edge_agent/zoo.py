@@ -19,8 +19,8 @@ import numpy as np
 
 from common.config import load_config, models_dir
 from ml.features import YamNet, log_mel, handcrafted, logmel_tf_input
-from ml.models.m9_fusion import (M9LightGBM, M7_EXTRA_CLASSES, N_FEATURES,
-                                 TEMPORAL_MODELS, CONTEXT_WINDOWS)
+from ml.models.m3_m4_m7_heads import M7_EXTRA_CLASSES  # noqa: E402
+from ml.models.m9_fusion import M9LightGBM, N_FEATURES, TEMPORAL_MODELS, CONTEXT_WINDOWS  # noqa: E402
 
 log = logging.getLogger("forestear.zoo")
 
@@ -180,9 +180,20 @@ class ModelZoo:
             it = self._i[mid]
             inp = it.get_input_details()[0]
             out = it.get_output_details()[0]
-            it.set_tensor(inp["index"], np.asarray(x, dtype=inp["dtype"]))
+            xx = np.asarray(x, dtype=np.float32)
+            if inp["dtype"] != np.float32:      # int8-quantised input
+                sc, zp = inp["quantization"]
+                if sc:
+                    xx = np.clip(np.round(xx / sc + zp), -128, 127)
+                xx = xx.astype(inp["dtype"])
+            it.set_tensor(inp["index"], xx)
             it.invoke()
-            return np.asarray(it.get_tensor(out["index"]))
+            y = np.asarray(it.get_tensor(out["index"]), dtype=np.float32)
+            if out["dtype"] != np.float32:      # dequantise to real scores
+                sc, zp = out["quantization"]
+                if sc:
+                    y = (y - zp) * sc
+            return y
         return self._k[mid].predict(x, verbose=0)
 
     def __call__(self, wav: np.ndarray, hour: float | None = None) -> WindowResult:
@@ -298,21 +309,28 @@ class ModelZoo:
         return v[None]
 
     def _run_m8(self, wav: np.ndarray) -> list[dict]:
-        """BirdNET on the hop window (padded/looped to 3 s)."""
+        """BirdNET on the hop window (padded/looped to the model's 3 s input)."""
         it = self.m8
         inp = it.get_input_details()[0]
         out = it.get_output_details()[0]
-        need = int(inp["shape"][-1]) if len(inp["shape"]) >= 1 else 144000
-        seg = np.asarray(wav, dtype=np.float32)
+        shape = [int(v) for v in inp["shape"]]
+        need = int(np.prod(shape)) or 144000
+        seg = np.asarray(wav, dtype=np.float32).reshape(-1)
         reps = int(np.ceil(need / max(len(seg), 1)))
-        seg = np.tile(seg, reps)[:need]
-        x = seg.reshape([1] + ([int(v) for v in inp["shape"][:-1]] or []) + [-1])
-        x = np.asarray(x, dtype=inp["dtype"])
-        if inp["dtype"] == np.int16 or "quant" in str(inp["dtype"]):
-            x = (np.clip(x, -1, 1) * 32767).astype(np.int16)
+        x = np.tile(seg, reps)[:need].reshape(shape)
+        if inp["dtype"] != np.float32:
+            sc, zp = inp["quantization"]
+            if sc:
+                x = np.clip(np.round(x / sc + zp), -128, 127).astype(inp["dtype"])
+            else:
+                x = x.astype(inp["dtype"])
         it.set_tensor(inp["index"], x)
         it.invoke()
-        p = np.asarray(it.get_tensor(out["index"])).reshape(-1)
+        p = np.asarray(it.get_tensor(out["index"]), dtype=np.float32).reshape(-1)
+        if out["dtype"] != np.float32:
+            sc, zp = out["quantization"]
+            if sc:
+                p = (p - zp) * sc
         top = np.argsort(p)[::-1][: self.m8_topk]
         return [{"species": self.m8_labels[i], "confidence": float(p[i])}
                 for i in top if p[i] > 0.03]

@@ -299,35 +299,35 @@ def main() -> int:
     Xva, yva = _oof_features(cache, "val")
     seed = cfg["training"]["seed"]
 
-    def train_eval_lgbm(mask_train, mask_test, calibrate=True):
-        Xa = Xva.copy(); Xb = Xte.copy()
+    def train_eval_lgbm(mask_train, mask_test):
+        """Mirror the DEPLOYED M9 protocol exactly (same split, seed and
+        hyperparameters) with one feature group zeroed: fit LightGBM on a
+        stratified 75% of OOF(val), isotonic-calibrate per class on the
+        held-out 25%, evaluate on test."""
+        from sklearn.isotonic import IsotonicRegression
+        from sklearn.model_selection import train_test_split
+
+        Xa = Xva.copy()
+        Xb = Xte.copy()
         if mask_train is not None:
             Xa[:, mask_train] = 0.0
         if mask_test is not None:
             Xb[:, mask_test] = 0.0
+        Xa_tr, Xa_cal, ya_tr, ya_cal = train_test_split(
+            Xa, yva, test_size=0.25, random_state=seed, stratify=yva)
         m = lgb.LGBMClassifier(n_estimators=300, learning_rate=0.06, num_leaves=31,
                                class_weight="balanced", random_state=seed,
                                verbose=-1, objective="multiclass", n_jobs=2)
-        m.fit(Xa, yva)
-        raw = np.asarray(m.predict(Xb))
-        if raw.ndim == 1:
-            raw = raw.reshape(1, -1) if len(Xb) == 1 else raw.reshape(-1, 1)
-        if calibrate:
-            from sklearn.isotonic import IsotonicRegression
-            # calibrate on a slice of val
-            rawv = np.asarray(m.predict(Xa)).reshape(len(yva), -1)
-            if rawv.shape[1] == 1:      # binary-ish output; expand to 5 columns
-                rawv = np.hstack([rawv, np.zeros((len(yva), 4))])
-            for j in range(rawv.shape[1]):
-                iso = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1)
-                iso.fit(rawv[:, j], (yva == j).astype(float))
-                raw[:, j] = iso.predict(raw[:, j])
-        s = raw.sum(axis=1, keepdims=True); s[s == 0] = 1
-        probs = raw / s
-        if probs.shape[1] < 5:  # degenerate single-column case
-            probs = np.hstack([probs, np.zeros((n, 5 - probs.shape[1]))])
-        pred = probs.argmax(axis=1)
-        return prf(yte, pred)
+        m.fit(Xa_tr, ya_tr)
+        raw = np.asarray(m.predict_proba(Xb), dtype=np.float64)   # (n, 5)
+        rawv = np.asarray(m.predict_proba(Xa_cal), dtype=np.float64)
+        for j in range(raw.shape[1]):
+            iso = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1)
+            iso.fit(rawv[:, j], (ya_cal == j).astype(float))
+            raw[:, j] = iso.predict(raw[:, j])
+        s = raw.sum(axis=1, keepdims=True)
+        s[s == 0] = 1
+        return prf(yte, (raw / s).argmax(axis=1))
 
     ablations = {}
     ablations["full_ensemble"] = m9_metrics
@@ -337,10 +337,9 @@ def main() -> int:
         np.arange(off["temporal"], off["temporal"] + 18), None)
     ablations["no_handcrafted"] = train_eval_lgbm(
         np.arange(off["handcrafted"], off["handcrafted"] + 6), None)
-    # uncalibrated full model
-    raw_full = np.asarray(m9.model.predict(Xte.astype(np.float64)))
-    if raw_full.ndim == 1:
-        raw_full = raw_full.reshape(len(Xte), -1)
+    # uncalibrated full model (raw LightGBM probabilities, no isotonic)
+    raw_full = np.asarray(m9.model.predict_proba(Xte.astype(np.float64)),
+                          dtype=np.float64)
     s = raw_full.sum(axis=1, keepdims=True); s[s == 0] = 1
     ablations["no_calibration"] = prf(yte, (raw_full / s).argmax(axis=1))
     # single-model baselines (already computed above)
@@ -349,11 +348,20 @@ def main() -> int:
 
     (reports_dir() / "ablation.json").write_text(json.dumps({
         "_meta": {"method": "LightGBM retrained on OOF(val) features with the "
-                  "feature group zeroed (train AND test); evaluated on test",
-                  "reference": "full_ensemble = M9 as deployed"},
+                  "feature group zeroed (train AND test), following the "
+                  "deployed protocol (75/25 stratified split, isotonic "
+                  "calibration on the held-out 25%); evaluated on test",
+                  "reference": "full_ensemble = M9 as deployed",
+                  "rows_note": "rows carry macro-F1 and are mutually "
+                  "comparable; single-model detection baselines (AP/AUROC, "
+                  "different metric) are reported separately"},
         "rows": [{"name": k, **{kk: vv for kk, vv in v.items()
-                                if kk in ("macro_f1", "accuracy", "ap", "auroc")}}
-                 for k, v in ablations.items()],
+                                if kk in ("macro_f1", "accuracy")}}
+                 for k, v in ablations.items()
+                 if k not in ("m3_chainsaw_only", "m2_gunshot_only")],
+        "single_model_detections": {k: ablations[k]
+                                    for k in ("m3_chainsaw_only",
+                                              "m2_gunshot_only")},
         "detail": ablations,
     }, indent=2))
 
@@ -375,9 +383,8 @@ def main() -> int:
 
     # ------------------------------------------------------------ calibration
     ece_c, brier_c, rel = ece_brier(p9, yte)
-    raw_full = np.asarray(m9.model.predict(Xte.astype(np.float64)))
-    if raw_full.ndim == 1:
-        raw_full = raw_full.reshape(len(Xte), -1)
+    raw_full = np.asarray(m9.model.predict_proba(Xte.astype(np.float64)),
+                          dtype=np.float64)
     s = raw_full.sum(axis=1, keepdims=True); s[s == 0] = 1
     ece_u, brier_u, _ = ece_brier(raw_full / s, yte)
     (reports_dir() / "calibration.json").write_text(json.dumps({
@@ -392,11 +399,13 @@ def main() -> int:
     from edge_agent.decision import DecisionEngine, WindowScores
     fired = defaultdict(int)
     correct_alerts = defaultdict(int)
+    benign_alerts = defaultdict(int)   # alerts raised on benign/weather windows
     veto_correct = 0
     veto_total = 0
     false_veto = 0
     gunshot_windows = 0
     hop_s = float(cfg["audio"]["hop_s"])
+    raw_labels = np.asarray(cache.y[idx])   # 8-class (weather_* kept intact)
     # replay windows grouped by origin: fresh engine per origin (independent
     # clips), synthetic clock advancing one hop per window (as in deployment)
     order = np.argsort(origins, kind="stable")
@@ -419,13 +428,15 @@ def main() -> int:
                     fired[d.cls] += 1
                     if d.cls == labels[k]:
                         correct_alerts[d.cls] += 1
+                    if labels[k] == "benign":
+                        benign_alerts[d.cls] += 1
                 elif d.suppressed_by:
                     veto_total += 1
-                    if labels[k].startswith("weather_"):
+                    if raw_labels[k].startswith("weather_"):
                         veto_correct += 1
-                    elif labels[k] == "gunshot":
+                    elif raw_labels[k] == "gunshot":
                         false_veto += 1
-            if labels[k] == "gunshot":
+            if raw_labels[k] == "gunshot":
                 gunshot_windows += 1
             t_sim += hop_s
             j += 1
@@ -436,14 +447,40 @@ def main() -> int:
     for c in THREAT:
         sup = int(np.sum(labels == c))
         alert_rec[c] = round(correct_alerts[c] / sup, 4) if sup else None
+
+    # false alarms per node-day: the ranger-facing system metric.
+    # The replay clock advances one hop per window, so total simulated
+    # listening = n_windows * hop_s. This stream contains every class in the
+    # test mix (a stress stream, not typical forest ambience) — noted in meta.
+    false_by_class = {c: fired[c] - correct_alerts[c] for c in fired}
+    threat_false = sum(false_by_class.get(c, 0) for c in THREAT)
+    sim_hours = n * hop_s / 3600.0
+    node_days = sim_hours / 24.0
+    fa_per_node_day = round(threat_false / node_days, 2) if node_days > 0 else None
+
     (reports_dir() / "decision_sim.json").write_text(json.dumps({
         "_meta": {"note": "replay of test windows through the DEPLOYED decision "
                   "layer (k-of-n persistence, cooldowns, weather veto); "
                   "window-level attribution: an alert counts correct if the "
-                  "window's true class matches the alert class"},
+                  "window's true class matches the alert class",
+                  "false_alarm_metric": "threat-class alerts (chainsaw/gunshot/"
+                  "vehicle/human) whose window class differs; anomaly INFO "
+                  "alerts excluded from the rate and reported per class",
+                  "node_day_note": "replay clock = one hop per window; the test "
+                  "split class mix is a stress stream, not typical forest "
+                  "ambience, so per-node-day is an extrapolation of THAT mix"},
         "alerts_fired": dict(fired),
+        "correct_alerts": dict(correct_alerts),
+        "false_alerts_per_class": false_by_class,
         "alert_precision_per_class": alert_prec,
         "alert_recall_per_class": alert_rec,
+        "alerts_on_benign_or_weather_windows": dict(benign_alerts),
+        "false_alarm_rate": {
+            "sim_hours": round(sim_hours, 2),
+            "node_days": round(node_days, 4),
+            "threat_false_alerts": threat_false,
+            "false_alarms_per_node_day": fa_per_node_day,
+        },
         "weather_veto": {"total_suppressions": veto_total,
                          "on_weather_windows": veto_correct,
                          "false_vetos_on_true_gunshot": false_veto,
@@ -492,6 +529,10 @@ def main() -> int:
            f"- recall per class: {alert_rec}",
            f"- weather veto: {veto_correct}/{veto_total} suppressions on weather "
            f"windows; {false_veto} false vetoes on true gunshot windows",
+           f"- false alarms (threat classes, window-level): {threat_false} in "
+           f"{sim_hours:.1f} h of replayed listening "
+           f"({fa_per_node_day} per node-day; stress stream — see "
+           f"decision_sim.json)",
            "", "Full JSON provenance: `reports/*.json`.", ""]
     (reports_dir() / "summary.md").write_text("\n".join(md))
 

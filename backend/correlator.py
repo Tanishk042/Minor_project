@@ -66,7 +66,8 @@ def _gn(nodes: list[tuple[float, float, float]], p0: np.ndarray,
     return p, resid
 
 
-def tdoa_solve(nodes: list[tuple[float, float, float]]) -> tuple[float, float, float]:
+def tdoa_solve(nodes: list[tuple[float, float, float]],
+               max_radius_m: float = 25_000.0) -> tuple[float, float, float]:
     """Least-squares TDOA localisation.
 
     nodes: [(x, y, t_arrival_s), ...] >= 3 nodes in a local ENU frame with
@@ -75,12 +76,20 @@ def tdoa_solve(nodes: list[tuple[float, float, float]]) -> tuple[float, float, f
 
     With EXACTLY 3 nodes the two hyperbolas can intersect twice (two-fold
     ambiguity) and both points satisfy the equations perfectly. We run
-    Gauss-Newton from the centroid plus several random restarts; if more
-    than one distinct solution fits, we keep the one nearest the array
-    centroid and inflate the reported radius to honestly cover the other.
-    4+ nodes make the system over-determined and the ambiguity disappears.
+    Gauss-Newton from the centroid plus several random restarts and keep the
+    solution with the smallest residual (nearest the centroid as a tie-break);
+    if another distinct solution fits almost as well, the reported radius is
+    inflated to cover it. 4+ nodes make the system over-determined and the
+    ambiguity disappears.
+
+    Timestamps carry unknown per-node clock offsets in a real deployment, so
+    fits are accepted up to ``fit_tol_m`` of median residual rather than
+    demanding a perfect fit. If no plausible solution exists (bad geometry,
+    inconsistent arrivals, unsynchronised clocks) this raises ``ValueError``
+    instead of publishing a numerically meaningless point.
     """
     assert len(nodes) >= 3, "TDOA needs >= 3 nodes"
+    fit_tol_m = 40.0
     P = np.array([(x, y) for x, y, _ in nodes])
     centroid = P.mean(axis=0)
     scale = float(np.median(np.linalg.norm(P - centroid, axis=1)))
@@ -93,23 +102,34 @@ def tdoa_solve(nodes: list[tuple[float, float, float]]) -> tuple[float, float, f
     sols: list[tuple[np.ndarray, float]] = []
     for s in starts:
         p, resid = _gn(nodes, s)
-        if p is None or resid > 5.0:      # not a valid fit (metres)
+        if p is None or resid > fit_tol_m:   # not a valid fit (metres)
+            continue
+        if not np.all(np.isfinite(p)):
             continue
         if not any(np.linalg.norm(p - q) < 20.0 for q, _ in sols):
             sols.append((p, resid))
     if not sols:
-        p, resid = _gn(nodes, centroid)    # best effort even if residual high
-        if p is None:
-            p = centroid
-            resid = 4 * scale
-        return float(p[0]), float(p[1]), float(resid + 25.0)
-    sols.sort(key=lambda sr: float(np.linalg.norm(sr[0] - centroid)))
+        raise ValueError(
+            f"no plausible TDOA solution (best residual > {fit_tol_m:.0f} m); "
+            "check clock synchronisation and arrival timestamps")
+    # Residual first: with 4+ nodes a wrong local minimum can sit closer to the
+    # centroid than the true source, so "nearest the centroid" alone would pick
+    # it. Only near-ties (the genuine 3-node hyperbola ambiguity) are broken by
+    # distance to the array.
+    sols.sort(key=lambda sr: (sr[1], float(np.linalg.norm(sr[0] - centroid))))
     p, resid = sols[0]
+    offset = float(np.linalg.norm(p - centroid))
+    if offset > max_radius_m:
+        raise ValueError(
+            f"TDOA solution {offset:.0f} m from array centroid exceeds "
+            f"{max_radius_m:.0f} m; refusing to publish")
     r = resid + 25.0                        # residual + floor for clock jitter
-    if len(sols) > 1:                       # ambiguous system: the truth may
-        far = max(float(np.linalg.norm(q - p)) for q, _ in sols[1:])
-        r += far                            # be either point -> cover both
-    return float(p[0]), float(p[1]), float(r)
+    for q, qres in sols[1:]:
+        # Another solution that fits within 15 m of the best one is a genuine
+        # ambiguity (3-node hyperbola pair); make the circle cover both.
+        if qres <= resid + 15.0:
+            r = max(r, float(np.linalg.norm(q - p)) + qres + 25.0)
+    return float(p[0]), float(p[1]), float(min(r, max_radius_m))
 
 
 def bearing_band(nodes: list[tuple[float, float, float]]) -> dict:
@@ -174,12 +194,9 @@ def correlate(events: list[dict], window_s: float = 6.0,
                     x, y = enu(g["lat"], g["lon"], lat0, lon0)
                     t = g["ts"].timestamp()
                     nodes.append((x, y, t))
-                # subtract common clock offset if known (simulator passes it)
-                if max_clock_offset_s:
-                    t0 = min(t for _, _, t in nodes)
-                    for k in range(len(nodes)):
-                        nodes[k] = (nodes[k][0], nodes[k][1],
-                                    nodes[k][2] - t0 * 0)  # offsets handled by caller
+                # Per-node clock offsets are NOT corrected here: in a real
+                # deployment they are unknown, so the solver's residual/radius
+                # inflation is what exposes them (see tdoa_solve).
                 try:
                     x, y, r = tdoa_solve(nodes)
                     lat, lon = latlon(x, y, lat0, lon0)

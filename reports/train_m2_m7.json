@@ -1,0 +1,55 @@
+[
+  {
+    "model": "m2_gunshot",
+    "auc": 0.9612208505722422,
+    "ap": 0.7632904923119862,
+    "n_train": 13868,
+    "n_val": 4320,
+    "train_seconds": 30896.2,
+    "params": 10122
+  },
+  {
+    "model": "m3_chainsaw",
+    "auc": 0.9353785735932922,
+    "ap": 0.6258485640565156,
+    "n_train": 13868,
+    "n_val": 4320,
+    "train_seconds": 24.5,
+    "params": 295425
+  },
+  {
+    "model": "m4_vehicle",
+    "auc": 0.770569520052,
+    "ap": 0.6073048629333124,
+    "n_train": 13868,
+    "n_val": 4320,
+    "train_seconds": 19.7,
+    "params": 295425
+  },
+  {
+    "model": "m5_weather",
+    "macro_f1": 0.6054588713664572,
+    "n_train": 13868,
+    "n_val": 4320,
+    "train_seconds": 48713.6,
+    "params": 10269
+  },
+  {
+    "model": "m6_anomaly",
+    "benign_med_err": 0.24417290091514587,
+    "benign_mad": 0.10160140693187714,
+    "val_threat_zscore": -0.5285641551017761,
+    "n_train": 2600,
+    "train_seconds": 121.1,
+    "params": 157041
+  },
+  {
+    "model": "m7_human",
+    "auc": 0.7647243610137572,
+    "ap": 0.5670060751766453,
+    "n_train": 13868,
+    "n_val": 4320,
+    "train_seconds": 28.5,
+    "params": 297473
+  }
+]

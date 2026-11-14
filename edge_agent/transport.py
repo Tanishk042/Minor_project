@@ -35,7 +35,12 @@ class Transport:
         qp = queue_path or self.cfg["node"]["queue_path"]
         Path(qp).parent.mkdir(parents=True, exist_ok=True)
         self.queue_path = str(qp)
-        self._db = sqlite3.connect(self.queue_path)
+        # The agent may create the Transport on the main thread and use it from
+        # a worker thread (simulator/run_nodes.py); SQLite defaults to
+        # same-thread-only connections, so opt out and serialise writes.
+        import threading
+        self._db_lock = threading.Lock()
+        self._db = sqlite3.connect(self.queue_path, check_same_thread=False)
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS offline_queue "
             "(id INTEGER PRIMARY KEY, ts REAL, payload TEXT, tries INT DEFAULT 0)")
@@ -80,29 +85,34 @@ class Transport:
 
     # ------------------------------------------------------------- queue
     def queue(self, payload: dict):
-        self._db.execute("INSERT INTO offline_queue (ts, payload) VALUES (?, ?)",
-                         (time.time(), json.dumps(payload)))
-        self._db.commit()
+        with self._db_lock:
+            self._db.execute("INSERT INTO offline_queue (ts, payload) VALUES (?, ?)",
+                             (time.time(), json.dumps(payload)))
+            self._db.commit()
         self.queued += 1
 
     def queue_len(self) -> int:
-        return int(self._db.execute("SELECT COUNT(*) FROM offline_queue"
-                                    ).fetchone()[0])
+        with self._db_lock:
+            return int(self._db.execute("SELECT COUNT(*) FROM offline_queue"
+                                        ).fetchone()[0])
 
     def flush(self, max_items: int = 200) -> int:
-        rows = self._db.execute(
-            "SELECT id, tries, payload FROM offline_queue "
-            "ORDER BY id LIMIT ?", (max_items,)).fetchall()
+        with self._db_lock:
+            rows = self._db.execute(
+                "SELECT id, tries, payload FROM offline_queue "
+                "ORDER BY id LIMIT ?", (max_items,)).fetchall()
         sent = 0
         for rid, tries, payload in rows:
             if tries > 30:
-                self._db.execute("DELETE FROM offline_queue WHERE id=?", (rid,))
-                self._db.commit()
+                with self._db_lock:
+                    self._db.execute("DELETE FROM offline_queue WHERE id=?", (rid,))
+                    self._db.commit()
                 continue
             ok = self._post("/ingest/event", json.loads(payload))
             if ok:
-                self._db.execute("DELETE FROM offline_queue WHERE id=?", (rid,))
-                self._db.commit()
+                with self._db_lock:
+                    self._db.execute("DELETE FROM offline_queue WHERE id=?", (rid,))
+                    self._db.commit()
                 sent += 1
             else:
                 break  # still offline; backoff handled by caller loop

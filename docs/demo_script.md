@@ -52,10 +52,13 @@ Narration beats:
 make demo-thunder
 ```
 
-Thunder cracks over the nodes. Gunshot scores may tick up, but M5 flags
-thunder ≥ 0.6 and the decision engine **suppresses the alert** — the
-suppressed event shows in the veto feed with its reason string. Zero
-false gunshot alerts is the pass condition.
+Thunder cracks over the nodes (~63 dB SPL at the microphones, well above the
+45 dB rain floor). In the rendered scenario **no gunshot candidate fires at
+all** — the model ensemble does not mistake this thunder for gunfire — so
+zero false alerts is the pass condition. The weather-veto code path itself
+(M5 thunder/rain ≥ 0.6 suppresses low-confidence gunshots) is covered by
+`tests/test_decision.py` and by `rainstorm_with_chainsaw`, which proves the
+veto does not over-hold.
 
 ## 4. Rainstorm + chainsaw — the veto must NOT over-hold (1.5 min)
 
@@ -78,6 +81,15 @@ time-difference-of-arrival and the map draws a **position + uncertainty
 circle** (green). The estimates tab / feed shows the method (`tdoa`),
 nodes used and radius. With 2 nodes it degrades honestly to a bearing
 band; with 1 node to a coarse radius (never a fake position).
+
+The scenario fires six synthetic impulses (21–71 s). The deployed 20 s
+gunshot cooldown turns those into three alerts; each is solved on all four
+nodes at **11 m error** with a **29 m** reported radius (the correlator
+alone solves all six at 9–12 m). A fit whose residual exceeds 40 m is
+refused rather than plotted. `poacher_party` has several simultaneous
+sources, so some groups mix shots from different positions; there the
+correlator logs `TDOA failed` and publishes no estimate instead of a wrong
+one — the intended failure mode.
 
 ## 6. Offline resilience (1 min)
 

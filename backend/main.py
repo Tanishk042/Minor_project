@@ -217,11 +217,31 @@ def _maybe_correlate(db, e: EventIn, ts):
         ests = correlate(data)
         for est in ests:
             if est["method"] == "tdoa":
-                se = SourceEstimate(cls=est["cls"], method=est["method"],
-                                    lat=est["lat"], lon=est["lon"],
-                                    radius_m=est["radius_m"],
-                                    nodes_used=",".join(est["nodes_used"]))
-                db.add(se)
+                # The correlator is re-run every time another node reports the
+                # same shot, so the same source can be estimated two or three
+                # times (3-node subset, then 4-node). Keep one row per shot and
+                # replace it when a later estimate uses more nodes.
+                est_ts = est["ts"]
+                if isinstance(est_ts, str):
+                    est_ts = parse_ts(est_ts)
+                near = (db.query(SourceEstimate)
+                        .filter(SourceEstimate.cls == est["cls"],
+                                SourceEstimate.method == "tdoa",
+                                SourceEstimate.ts >= est_ts - dt.timedelta(seconds=6),
+                                SourceEstimate.ts <= est_ts + dt.timedelta(seconds=6))
+                        .all())
+                n_new = len(est["nodes_used"])
+                better = [p for p in near
+                          if len((p.nodes_used or "").split(",")) < n_new]
+                for p in better:
+                    db.delete(p)
+                if better or not near:
+                    se = SourceEstimate(ts=est_ts, cls=est["cls"],
+                                        method=est["method"],
+                                        lat=est["lat"], lon=est["lon"],
+                                        radius_m=est["radius_m"],
+                                        nodes_used=",".join(est["nodes_used"]))
+                    db.add(se)
                 db.commit()
                 _pending.append({"type": "source_estimate", **{
                     k: (v.isoformat() if isinstance(v, dt.datetime) else v)
@@ -301,6 +321,8 @@ def ingest_scores(s: ScoresIn):
     rate_limit(s.node_id)
     _pending.append({"type": "scores", "node_id": s.node_id, "ts": s.ts,
                      "scores": s.scores, "spect": s.spect, "rms_db": s.rms_db})
+    if len(_pending) > 600:   # bound replay buffer under telemetry floods
+        _pending[:] = [m for m in _pending if m.get("type") != "scores"][-300:]
     return {"ok": True}
 
 
