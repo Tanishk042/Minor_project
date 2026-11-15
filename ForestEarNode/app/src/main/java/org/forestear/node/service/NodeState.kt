@@ -42,6 +42,21 @@ data class NodeStatus(
     val lastHeartbeatMs: Long = 0L,
     val inferenceMs: Double = 0.0,
     val adaptiveStride: Int = 1,
+    val deviceHeadline: String = "",
+    val tier: String = "—",
+    val tierReason: String = "",
+    val runtimeHopS: Double = 0.5,
+    val runtimeReason: String = "",
+    val degraded: Boolean = false,
+    val degradedReason: String = "",
+    val clockOffsetMs: Long? = null,
+    val freeStorageMb: Int = 0,
+    val continuity: String = "",
+    val audioRate: Int = 16000,
+    val resampling: Boolean = false,
+    val capabilitiesMissing: List<String> = emptyList(),
+    val networkTransport: String = "unknown",
+    val streamingOnly: Boolean = false,
 ) {
     val threatScore: Float
         get() = lastWindow?.threatScore ?: 0f

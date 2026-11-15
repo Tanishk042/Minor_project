@@ -13,7 +13,8 @@
 #   ./pull_collection.sh --clear-only   # delete from the device, no pull
 set -euo pipefail
 
-PKG="org.forestear.node"
+PKG="${FORESTEAR_PACKAGE:-org.forestear.node}"
+ACTIONS="${FORESTEAR_ACTION_PREFIX:-org.forestear.node}"
 ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
 [[ -x "$ADB" ]] || ADB="$(command -v adb || true)"
 [[ -n "$ADB" ]] || { echo "adb not found" >&2; exit 1; }
@@ -44,7 +45,7 @@ if [[ "$CLEAR_ONLY" == "0" ]]; then
   if [[ "${COUNT:-0}" -eq 0 ]]; then
     echo "No collection chunks on device ($REMOTE)."
     echo "Enable collection in Settings, or:"
-    echo "  $ADB shell am broadcast -a org.forestear.node.COLLECT_ON -n $PKG/.service.ControlReceiver"
+    echo "  $ADB shell am broadcast -a $ACTIONS.COLLECT_ON -n $PKG/.service.ControlReceiver"
   else
     echo "Pulling $COUNT file(s) from $REMOTE ..."
     "$ADB" pull "$REMOTE/." "$OUT/" >/dev/null

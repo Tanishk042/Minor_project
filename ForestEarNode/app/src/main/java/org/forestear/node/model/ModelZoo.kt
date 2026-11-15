@@ -47,18 +47,31 @@ class ModelZoo(
     private val assets: FeatureAssets,
     delegateFor: (String) -> DelegateKind = { DelegateKind.CPU_XNNPACK },
     private val loadBirdnet: Boolean = true,
+    private val enabledModels: Set<String> = ALL_MODELS,
 ) : Closeable {
 
     private val logMel = LogMel(assets, config.features)
     private val handcrafted = Handcrafted(assets, config.features)
     private val yamnet = YamnetModel(context, config.model("m1").file, delegateFor("m1"))
-    private val m2 = TfliteModel.load(context, config.model("m2").file, "m2", delegateFor("m2"))
-    private val m3 = TfliteModel.load(context, config.model("m3").file, "m3", delegateFor("m3"))
-    private val m4 = TfliteModel.load(context, config.model("m4").file, "m4", delegateFor("m4"))
-    private val m5 = TfliteModel.load(context, config.model("m5").file, "m5", delegateFor("m5"))
-    private val m6 = TfliteModel.load(context, config.model("m6").file, "m6", delegateFor("m6"))
-    private val m7 = TfliteModel.load(context, config.model("m7").file, "m7", delegateFor("m7"))
-    private val m8: TfliteModel? = if (loadBirdnet) {
+    private val m2: TfliteModel? = if (enabled("m2")) {
+        TfliteModel.load(context, config.model("m2").file, "m2", delegateFor("m2"))
+    } else null
+    private val m3: TfliteModel? = if (enabled("m3")) {
+        TfliteModel.load(context, config.model("m3").file, "m3", delegateFor("m3"))
+    } else null
+    private val m4: TfliteModel? = if (enabled("m4")) {
+        TfliteModel.load(context, config.model("m4").file, "m4", delegateFor("m4"))
+    } else null
+    private val m5: TfliteModel? = if (enabled("m5")) {
+        TfliteModel.load(context, config.model("m5").file, "m5", delegateFor("m5"))
+    } else null
+    private val m6: TfliteModel? = if (enabled("m6")) {
+        TfliteModel.load(context, config.model("m6").file, "m6", delegateFor("m6"))
+    } else null
+    private val m7: TfliteModel? = if (enabled("m7")) {
+        TfliteModel.load(context, config.model("m7").file, "m7", delegateFor("m7"))
+    } else null
+    private val m8: TfliteModel? = if (loadBirdnet && enabled("m8")) {
         runCatching {
             TfliteModel.load(context, config.model("m8").file, "m8", delegateFor("m8"))
         }.onFailure { FLog.e("BirdNET unavailable; biodiversity disabled", it) }.getOrNull()
@@ -117,11 +130,11 @@ class ModelZoo(
         timings["m1"] = ms(t)
 
         t = System.nanoTime()
-        val m2Value = m2.run(tfInput)[0]
+        val m2Value = m2?.run(tfInput)?.get(0) ?: 0f
         timings["m2"] = ms(t)
 
         t = System.nanoTime()
-        val m5Values = m5.run(tfInput)
+        val m5Values = m5?.run(tfInput) ?: FloatArray(0)
         val m5Map = LinkedHashMap<String, Float>()
         for (i in m5Classes.indices) {
             m5Map[m5Classes[i]] = if (i < m5Values.size) m5Values[i] else 0f
@@ -130,18 +143,18 @@ class ModelZoo(
 
         t = System.nanoTime()
         val embNorm3 = m3Norm?.apply(embedding) ?: embedding
-        val m3Value = m3.run(embNorm3)[0]
+        val m3Value = m3?.run(embNorm3)?.get(0) ?: 0f
         timings["m3"] = ms(t)
 
         t = System.nanoTime()
         val embNorm4 = m4Norm?.apply(embedding) ?: embedding
-        val m4Value = m4.run(embNorm4)[0]
+        val m4Value = m4?.run(embNorm4)?.get(0) ?: 0f
         timings["m4"] = ms(t)
 
         t = System.nanoTime()
         var m6Err = 0f
         var m6Z = lastM6Z.toFloat()
-        if (m6Enabled) {
+        if (m6Enabled && m6 != null) {
             val rec = m6.run(tfInput)
             var err = 0.0
             for (i in tfInput.indices) {
@@ -169,13 +182,15 @@ class ModelZoo(
         timings["m6"] = ms(t)
 
         t = System.nanoTime()
-        val m7Input = FloatArray(1024 + m7ExtraNames.size)
-        System.arraycopy(embedding, 0, m7Input, 0, 1024)
-        for (i in m7ExtraNames.indices) {
-            val idx = m7ExtraIndices[i]
-            m7Input[1024 + i] = if (idx in scores.indices) scores[idx] else 0f
-        }
-        val m7Value = m7.run(m7Norm?.apply(m7Input) ?: m7Input)[0]
+        val m7Value = if (m7 != null) {
+            val m7Input = FloatArray(1024 + m7ExtraNames.size)
+            System.arraycopy(embedding, 0, m7Input, 0, 1024)
+            for (i in m7ExtraNames.indices) {
+                val idx = m7ExtraIndices[i]
+                m7Input[1024 + i] = if (idx in scores.indices) scores[idx] else 0f
+            }
+            m7.run(m7Norm?.apply(m7Input) ?: m7Input)[0]
+        } else 0f
         timings["m7"] = ms(t)
 
         t = System.nanoTime()
@@ -297,6 +312,23 @@ class ModelZoo(
         else (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
     }
 
+    private fun enabled(id: String): Boolean = enabledModels.contains(id)
+
+    /** Models actually loaded on this phone/tier. */
+    fun availableModels(): Set<String> = buildSet {
+        add("m1")
+        if (m2 != null) add("m2")
+        if (m3 != null) add("m3")
+        if (m4 != null) add("m4")
+        if (m5 != null) add("m5")
+        if (m6 != null) add("m6")
+        if (m7 != null) add("m7")
+        if (m8 != null) add("m8")
+        add("m9")
+    }
+
+    fun currentEnabledModels(): Set<String> = enabledModels.toSet()
+
     private fun currentUtcHour(): Double {
         val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
         return now.hour + now.minute / 60.0
@@ -306,7 +338,11 @@ class ModelZoo(
 
     override fun close() {
         yamnet.close()
-        for (m in listOf(m2, m3, m4, m5, m6, m7)) m.close()
+        for (m in listOfNotNull(m2, m3, m4, m5, m6, m7)) m.close()
         m8?.close()
+    }
+
+    companion object {
+        val ALL_MODELS: Set<String> = setOf("m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9")
     }
 }

@@ -14,12 +14,15 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,13 +30,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.forestear.node.config.AppConfig
+import org.forestear.node.device.DeviceProfileStore
+import org.forestear.node.device.PerfTier
+import org.forestear.node.service.NodeService
 import org.forestear.node.settings.InputChoice
 import org.forestear.node.settings.SettingsStore
 import org.forestear.node.transport.OfflineQueue
 import org.forestear.node.transport.SmsSender
 import org.forestear.node.transport.Transport
 import org.forestear.node.ui.ForestAmber
+import org.forestear.node.ui.ForestGreen
 import org.forestear.node.ui.ForestMuted
 import org.forestear.node.ui.ForestRed
 import org.forestear.node.ui.InfoBanner
@@ -90,6 +100,37 @@ fun SettingsScreen(
     var streamingEnabled by remember { mutableStateOf(settings.streamingEnabled) }
     var useFixed by remember { mutableStateOf(settings.useFixedLocation) }
     var collectionEnabled by remember { mutableStateOf(settings.collectionEnabled) }
+    var tierOverride by remember { mutableStateOf(settings.tierOverride) }
+    var continuityMinutes by remember { mutableIntStateOf(settings.continuityMinutes) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val deviceStore = remember { DeviceProfileStore(context) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(settings.exportJson().toByteArray())
+            } != null
+        }.getOrDefault(false)
+        notice = if (ok) "Settings exported." else "Export failed."
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = runCatching {
+            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+        }.getOrNull()
+        notice = when {
+            text == null -> "Could not read the selected file."
+            settings.importJson(text) ->
+                "Settings imported. Stop and start monitoring to apply input/tier changes."
+            else -> "Import rejected: not a ForestEar settings file (schema mismatch)."
+        }
+    }
 
     Column(
         Modifier
@@ -105,6 +146,7 @@ fun SettingsScreen(
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        notice?.let { InfoBanner(it, ForestGreen) }
 
         SectionCard(title = "Node identity and backend") {
             SettingTextField("Node ID", settings.nodeId, { settings.nodeId = it })
@@ -120,6 +162,52 @@ fun SettingsScreen(
                 settings.token,
                 { settings.token = it },
                 supporting = "Must match the backend FORESTEAR_TOKEN.",
+            )
+        }
+
+        SectionCard(
+            title = "Performance tier",
+            subtitle = "Automatic uses the last benchmark. A manual override is always " +
+                "honoured, but the app notes when it exceeds the latency budget.",
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = tierOverride == null,
+                    onClick = {
+                        tierOverride = null
+                        settings.tierOverride = null
+                        notice = "Tier set to automatic; the next benchmark re-selects it."
+                    },
+                    label = { Text("Auto", fontSize = 12.sp) },
+                )
+                for (tier in PerfTier.values()) {
+                    FilterChip(
+                        selected = tierOverride == tier,
+                        onClick = {
+                            tierOverride = tier
+                            settings.tierOverride = tier
+                            notice = "Tier override ${tier.name}; models reload on the next hop."
+                        },
+                        label = { Text(tier.name, fontSize = 12.sp) },
+                    )
+                }
+            }
+            KeyValueRow(
+                "Active plan",
+                settings.tierPlan()?.let { "${it.tier.name} — ${it.reason}" } ?: "not selected yet",
+            )
+            KeyValueRow(
+                "Last benchmark",
+                settings.lastBenchmarkTotalMs.let {
+                    if (it.isFinite() && it > 0) "%.1f ms per window".format(Locale.US, it)
+                    else "not measured on this phone"
+                },
+            )
+            Text(
+                "A = all 9 models / 0.5 s hop · B = all / 1 s with duty cycling · " +
+                    "C = core models / 1–2 s · D = core models + raw streaming.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -153,8 +241,19 @@ fun SettingsScreen(
                     budget = it.toInt()
                     settings.analysisBudgetMs = budget
                 },
-                "Above budget the service lengthens the effective hop up to 8x; " +
-                    "below half budget it steps back down.",
+                "Above budget the runtime governor lengthens the hop, then duty-cycles " +
+                    "anomaly and BirdNET, then falls back to streaming-only.",
+            )
+            SettingSlider(
+                "Continuity test length",
+                continuityMinutes.toFloat(),
+                1f..60f,
+                "$continuityMinutes min",
+                {
+                    continuityMinutes = it.toInt()
+                    settings.continuityMinutes = continuityMinutes
+                },
+                "Used by Setup and Tools → screen-off continuity test.",
             )
             SettingSlider(
                 "BirdNET duty cycle",
@@ -175,14 +274,16 @@ fun SettingsScreen(
                 options = listOf(
                     InputChoice.AUTO.name to "Auto",
                     InputChoice.BUILTIN.name to "Built-in",
-                    InputChoice.WIRED_HEADSET.name to "TRRS / USB",
+                    InputChoice.WIRED_HEADSET.name to "3.5 mm",
+                    InputChoice.USB.name to "USB",
                 ),
                 selected = choice.name,
                 onSelect = {
                     choice = InputChoice.valueOf(it)
                     settings.inputChoice = choice
                 },
-                subtitle = "Auto prefers a wired headset or USB lavalier, then the built-in mic.",
+                subtitle = "Auto prefers USB, then a wired 3.5 mm headset, then the built-in mic. " +
+                    "Bluetooth is never chosen automatically.",
             )
             SettingSlider(
                 "Built-in mic gain",
@@ -456,6 +557,48 @@ fun SettingsScreen(
                 "Storage cap",
                 "${((config?.android?.collection?.maxBytes ?: 2_000_000_000L) / 1_000_000_000L)} GB",
             )
+        }
+
+        SectionCard(
+            title = "Device profile and settings files",
+            subtitle = "The capability probe runs on first launch and after every app update. " +
+                "Export/import moves configuration only; it never includes audio, logs or the " +
+                "device profile.",
+        ) {
+            val device = remember { deviceStore.load() }
+            KeyValueRow("Profile file", deviceStore.path())
+            KeyValueRow("Device", device?.headline() ?: "not probed yet")
+            KeyValueRow("Profile schema", device?.schema?.toString() ?: "—")
+            if (!device?.missing.isNullOrEmpty()) {
+                KeyValueRow(
+                    "Missing capabilities",
+                    device!!.missing.joinToString(", "),
+                    ForestAmber,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (settings.mockCapabilities) {
+                            notice = "Mock capabilities are on; turn them off to re-probe the real device."
+                        } else if (NodeService.isRunning) {
+                            NodeService.action(context, NodeService.ACTION_REPROBE)
+                            notice = "Re-probing this handset; check Status in a moment."
+                        } else {
+                            scope.launch {
+                                withContext(Dispatchers.IO) { deviceStore.current(force = true) }
+                                notice = "Device profile re-probed."
+                            }
+                        }
+                    },
+                ) { Text("Re-probe device", fontSize = 12.sp) }
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("forestear_settings.json") },
+                ) { Text("Export settings", fontSize = 12.sp) }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
+                ) { Text("Import settings", fontSize = 12.sp) }
+            }
         }
 
         Text(

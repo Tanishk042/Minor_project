@@ -13,7 +13,10 @@
 #   ./soak.sh --report             # pull the last report only
 set -euo pipefail
 
-PKG="org.forestear.node"
+PKG="${FORESTEAR_PACKAGE:-org.forestear.node}"
+# Broadcast actions are part of the app's manifest, not its application id. A
+# fork that changes only the package should also set this prefix.
+ACTIONS="${FORESTEAR_ACTION_PREFIX:-org.forestear.node}"
 ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
 [[ -x "$ADB" ]] || ADB="$(command -v adb || true)"
 [[ -n "$ADB" ]] || { echo "adb not found" >&2; exit 1; }
@@ -52,7 +55,7 @@ pull_report() {
 
 case "${1:-}" in
   --start)
-    broadcast "$PKG.SOAK_ON"
+    broadcast "$ACTIONS.SOAK_ON"
     echo "Soak running. Check in with: $0 --status"
     ;;
   --status)
@@ -67,7 +70,7 @@ case "${1:-}" in
     done
     ;;
   --stop)
-    broadcast "$PKG.SOAK_OFF"
+    broadcast "$ACTIONS.SOAK_OFF"
     sleep 2
     pull_report
     ;;

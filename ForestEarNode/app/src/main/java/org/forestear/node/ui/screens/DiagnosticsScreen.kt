@@ -30,6 +30,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.forestear.node.config.AppConfig
+import org.forestear.node.device.DeviceProfileStore
+import org.forestear.node.device.RecoveryLog
 import org.forestear.node.diagnostics.Benchmark
 import org.forestear.node.diagnostics.BenchmarkReport
 import org.forestear.node.diagnostics.SelfTest
@@ -65,6 +67,9 @@ fun DiagnosticsScreen(status: NodeStatus) {
     var bench by remember { mutableStateOf<BenchmarkReport?>(null) }
     var benchBusy by remember { mutableStateOf(false) }
     var benchError by remember { mutableStateOf<String?>(null) }
+    var reportPath by remember { mutableStateOf<String?>(null) }
+    val profile = remember { DeviceProfileStore(context).current() }
+    val recovery = remember { RecoveryLog(context).load() }
 
     Column(
         Modifier
@@ -155,6 +160,112 @@ fun DiagnosticsScreen(status: NodeStatus) {
                     }
                 }
             }
+        }
+
+        SectionCard(
+            title = "Capability profile",
+            subtitle = "Probed from this handset. Unknown values are recorded as missing, not guessed.",
+        ) {
+            KeyValueRow("Device", profile.headline())
+            KeyValueRow("SoC", "${profile.build.socManufacturer} ${profile.build.socModel}")
+            KeyValueRow("RAM / storage", "${profile.build.ramTotalMb} MB / ${profile.build.freeStorageMb} MB free")
+            KeyValueRow(
+                "Audio inputs",
+                profile.audio.inputs.joinToString { "${it.name} (${it.typeLabel})" }
+                    .ifBlank { "none enumerated" },
+            )
+            KeyValueRow(
+                "Effects",
+                "AGC=${profile.audio.agcAvailable} NS=${profile.audio.nsAvailable} " +
+                    "AEC=${profile.audio.aecAvailable} · UNPROCESSED=${profile.audio.unprocessedSupported}",
+            )
+            KeyValueRow(
+                "Telephony",
+                if (!profile.telephony.hasTelephony) "none (Wi-Fi-only device)"
+                else "${profile.telephony.simSlots} slot(s), ${profile.telephony.subscriptions.size} subscription(s), " +
+                    "SMS=${profile.telephony.hasSms}",
+            )
+            KeyValueRow(
+                "Location",
+                "gps=${profile.location.hasGps} network=${profile.location.hasNetworkProvider} " +
+                    "fused=${profile.location.hasFusedProvider} (fixed coordinates always allowed)",
+            )
+            KeyValueRow(
+                "Battery",
+                "${profile.battery.percent}% · ${profile.battery.plugged} · " +
+                    "temp=${profile.battery.temperatureC?.let { fmt(it, 1) + " C" } ?: "unknown"} · " +
+                    "thermal=${profile.battery.thermalLabel} · removable=${profile.battery.removable}",
+            )
+            if (profile.missing.isNotEmpty()) {
+                KeyValueRow(
+                    "Missing",
+                    profile.missing.joinToString(", "),
+                    ForestAmber,
+                )
+            }
+        }
+
+        SectionCard(
+            title = "Compatibility report",
+            subtitle = "Writes docs/compatibility_report_<model>.md from the probe, the last " +
+                "self-test and the recorded recovery paths. Unrun paths stay NOT RUN.",
+        ) {
+            Button(
+                onClick = {
+                    val report = selfTest
+                    if (report == null) return@Button
+                    scope.launch {
+                        val file = withContext(Dispatchers.IO) {
+                            SelfTest(context, settings).saveCompatibilityReport(report)
+                        }
+                        reportPath = file?.absolutePath ?: "write failed"
+                    }
+                },
+                enabled = selfTest != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (selfTest == null) "Run the self-test first" else "Write compatibility report") }
+            reportPath?.let { KeyValueRow("Report file", it) }
+            val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "docs")
+            Text(
+                "adb pull /sdcard/Android/data/org.forestear.node/files/docs/ ./phone-docs/",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            KeyValueRow("Directory", dir.absolutePath)
+        }
+
+        SectionCard(
+            title = "Recovery paths",
+            subtitle = "These decide whether a phone survives as a node. The app records only " +
+                "paths that were actually exercised; the rest stay NOT RUN.",
+        ) {
+            val known = listOf(
+                "kill_service" to "Killed by the system / adb",
+                "swipe_away" to "Swiped from Recents",
+                "reboot" to "Phone rebooted",
+                "boot_receiver" to "Boot receiver restart",
+                "watchdog" to "Watchdog restart",
+                "screen_off" to "Screen-off continuity",
+                "mic_theft" to "Microphone taken by another app",
+            )
+            for ((id, title) in known) {
+                val result = recovery.firstOrNull { it.path == id }
+                KeyValueRow(
+                    title,
+                    (result?.outcome ?: "NOT RUN") + (result?.detail?.let { " · $it" } ?: ""),
+                    when (result?.outcome) {
+                        "PASS" -> ForestGreen
+                        "FAIL" -> ForestRed
+                        else -> ForestAmber
+                    },
+                )
+            }
+            Text(
+                "Run kill/swipe/reboot tests with android/scripts/recovery_test.sh while the " +
+                    "phone is connected; results are appended to recovery_paths.json.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         SectionCard(

@@ -24,6 +24,17 @@ import org.forestear.node.config.AppConfig
 import org.forestear.node.decision.Decision
 import org.forestear.node.decision.DecisionEngine
 import org.forestear.node.decision.WindowScores
+import org.forestear.node.device.DeviceProfile
+import org.forestear.node.device.DeviceProfileStore
+import org.forestear.node.device.LatencyBudget
+import org.forestear.node.device.OemIntents
+import org.forestear.node.device.OemProfileTable
+import org.forestear.node.device.PerfTier
+import org.forestear.node.device.RecoveryLog
+import org.forestear.node.device.RuntimePlan
+import org.forestear.node.device.SntpClient
+import org.forestear.node.device.TierPlan
+import org.forestear.node.device.TierSelector
 import org.forestear.node.diagnostics.SoakTracker
 import org.forestear.node.features.FeatureAssets
 import org.forestear.node.location.LocationProvider
@@ -93,10 +104,29 @@ class NodeService : Service(), AudioCapture.Listener {
     private lateinit var soak: SoakTracker
     private lateinit var protection: ProtectionChecker
     private lateinit var decision: DecisionEngine
+    private lateinit var deviceStore: DeviceProfileStore
+    private lateinit var oemTable: OemProfileTable
+    private lateinit var oemIntents: OemIntents
+    private lateinit var recoveryLog: RecoveryLog
+    private lateinit var connectivity: ConnectivityMonitor
 
     private var zoo: ModelZoo? = null
     private var capture: AudioCapture? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private val clockExecutor = Executors.newSingleThreadExecutor()
+
+    @Volatile private var deviceProfile: DeviceProfile? = null
+    @Volatile private var tierPlan: TierPlan? = null
+    @Volatile private var runtimePlan: RuntimePlan? = null
+    @Volatile private var degraded = false
+    @Volatile private var degradedReason: String = ""
+    @Volatile private var clockOffsetMs: Long? = null
+    @Volatile private var lastClockSyncMs = 0L
+    @Volatile private var continuityStartMs = 0L
+    @Volatile private var continuityWindowsStart = 0L
+    @Volatile private var continuityGapsStart = 0L
+    private var continuityGaps = 0L
+    private var continuityRunning = false
 
     @Volatile private var micForeground = false
     @Volatile private var explicitStop = false
@@ -166,7 +196,19 @@ class NodeService : Service(), AudioCapture.Listener {
         governor = ThermalGovernor(config, settings)
         batteryCsv = BatteryCsvLogger(this)
         soak = SoakTracker(this, settings)
-        protection = ProtectionChecker(this, settings)
+        deviceStore = DeviceProfileStore(this)
+        oemTable = runCatching { OemProfileTable.load(AndroidAssetSource(this)) }
+            .getOrElse {
+                FLog.w("OEM profile table unavailable: ${it.message}")
+                OemProfileTable(
+                    listOf(OemProfileTable.fallback), emptyList(), "generic"
+                )
+            }
+        oemIntents = OemIntents(this, oemTable)
+        recoveryLog = RecoveryLog(this)
+        protection = ProtectionChecker(this, settings, oemTable, oemIntents)
+        connectivity = ConnectivityMonitor(this) { executor.execute { transport.flush() } }
+        connectivity.start()
         decision = DecisionEngine(
             config.decision.withThresholdOverrides(settings.thresholdOverrides())
         )
@@ -183,6 +225,7 @@ class NodeService : Service(), AudioCapture.Listener {
                 running = true, starting = true, restartCount = restarts,
                 serviceStartedAtMs = serviceStartMs, uptimeMs = settings.totalUptimeMs,
                 protection = protection.check(), smsStatus = settings.lastSmsStatus,
+                continuity = settings.continuityResultJson,
             )
         }
         handler.post(heartbeatRunnable)
@@ -252,6 +295,9 @@ class NodeService : Service(), AudioCapture.Listener {
                 upgradeToMicForeground()
                 startPipeline()
             }
+            ACTION_CONTINUITY_START -> startContinuityTest()
+            ACTION_CONTINUITY_STOP -> finishContinuityTest("stopped by user")
+            ACTION_REPROBE -> reprobeDevice()
             ACTION_BOOT, ACTION_WATCHDOG -> {
                 if (!settings.autoStart) {
                     stopSelf()
@@ -259,9 +305,22 @@ class NodeService : Service(), AudioCapture.Listener {
                 }
                 if (Build.VERSION.SDK_INT >= 34) {
                     // While-in-use FGS cannot start from the background on 14+.
+                    markDegraded(
+                        "Android ${Build.VERSION.RELEASE} blocks a microphone foreground " +
+                            "service from the background"
+                    )
                     notification.update(
                         NotificationHelper.SERVICE_ID,
                         "open the app once to start the microphone"
+                    )
+                    notification.reentry(
+                        "ForestEar monitoring stopped",
+                        "Android ${Build.VERSION.RELEASE} does not allow the microphone to start " +
+                            "from the background. Open ForestEar Node to resume monitoring.",
+                    )
+                    recoveryLog.record(
+                        "boot_receiver", "FAIL",
+                        "background start blocked on API ${Build.VERSION.SDK_INT}; notification shown"
                     )
                 } else {
                     upgradeToMicForeground()
@@ -310,6 +369,8 @@ class NodeService : Service(), AudioCapture.Listener {
         runCatching { collection.stop() }
         runCatching { zoo?.close() }
         zoo = null
+        runCatching { connectivity.stop() }
+        runCatching { clockExecutor.shutdownNow() }
         releaseWakeLock()
         if (explicitStop) {
             WatchdogAlarmReceiver.cancel(this)
@@ -373,9 +434,14 @@ class NodeService : Service(), AudioCapture.Listener {
             // Android 14 while-in-use restriction: keep dataSync alive and wait.
             micForeground = false
             FLog.w("microphone FGS upgrade refused: ${e.message}")
+            markDegraded("microphone foreground type refused: ${e.message}")
             notification.update(
                 NotificationHelper.SERVICE_ID,
                 "open the app once to start the microphone"
+            )
+            notification.reentry(
+                "ForestEar needs the app in the foreground",
+                "Android refused the microphone foreground service. Open ForestEar Node to resume monitoring.",
             )
         }
     }
@@ -390,17 +456,48 @@ class NodeService : Service(), AudioCapture.Listener {
         NodeState.update { it.copy(starting = true) }
         executor.execute {
             try {
+                val profile = deviceStore.current()
+                deviceProfile = profile
+                var plan = resolveTier(profile)
+                tierPlan = plan
+                runtimePlan = LatencyBudget.initial(plan)
                 if (zoo == null) {
-                    zoo = ModelZoo(
-                        this, config, assets,
-                        delegateFor = { id -> DelegateKind.fromName(settings.bestDelegateFor(id)) },
-                        loadBirdnet = true,
-                    )
+                    zoo = buildZoo(plan)
+                    val actual = zoo?.availableModels() ?: emptySet()
+                    if (!actual.containsAll(plan.enabledModels)) {
+                        FLog.w("tier ${plan.tier} expected ${plan.enabledModels} but loaded $actual")
+                        val corrected = TierSelector.select(
+                            measuredPipelineMs = settings.lastBenchmarkTotalMs,
+                            budgetMs = settings.analysisBudgetMs.toDouble(),
+                            availableModels = actual,
+                            gpuModels = settings.gpuStableModels,
+                            cores = profile.build.cores,
+                            ramTotalMb = profile.build.ramTotalMb,
+                            manualTier = settings.tierOverride,
+                        )
+                        if (corrected.enabledModels != plan.enabledModels) {
+                            runCatching { zoo?.close() }
+                            zoo = null
+                            plan = corrected
+                            zoo = buildZoo(plan)
+                        }
+                        tierPlan = plan
+                        runtimePlan = LatencyBudget.initial(plan)
+                        settings.setTierPlan(plan, profile.profileKey())
+                    }
                 }
+                clearDegraded()
                 NodeState.update {
                     it.copy(
                         starting = false, modelLoaded = true,
                         protection = protection.check(),
+                        deviceHeadline = profile.headline(),
+                        tier = plan.tier.name, tierReason = plan.reason,
+                        runtimeHopS = plan.hopS,
+                        freeStorageMb = profile.build.freeStorageMb,
+                        capabilitiesMissing = profile.missing,
+                        streamingOnly = plan.streamOnly,
+                        adaptiveStride = max(1, (plan.hopS / 0.5).roundToInt()),
                     )
                 }
                 if (settings.collectionEnabled && !(lastGovernor?.pauseInference ?: false)) {
@@ -419,12 +516,163 @@ class NodeService : Service(), AudioCapture.Listener {
             } catch (e: Throwable) {
                 FLog.e("pipeline start failed", e)
                 NodeState.update { it.copy(starting = false, lastError = e.message) }
+                markDegraded("model load failed: ${e.message}")
                 notification.warning("Model loading failed", e.message ?: "unknown error")
                 pipelineStarted.set(false)
                 handler.postDelayed({ startPipeline() }, 60_000L)
             }
         }
     }
+
+    private fun buildZoo(plan: TierPlan): ModelZoo = ModelZoo(
+        this, config, assets,
+        delegateFor = { id -> DelegateKind.fromName(settings.bestDelegateFor(id)) },
+        loadBirdnet = plan.m8Enabled,
+        enabledModels = plan.enabledModels,
+    )
+
+    /**
+     * Reuse a tier measured for this app version + handset, otherwise select one
+     * from the last benchmark. A manual override always wins.
+     */
+    private fun resolveTier(profile: DeviceProfile): TierPlan {
+        val key = profile.profileKey()
+        val override = settings.tierOverride
+        val stored = settings.tierPlan()
+        if (override == null && stored != null && !settings.tierIsStale(key)) {
+            return stored
+        }
+        val plan = TierSelector.select(
+            measuredPipelineMs = settings.lastBenchmarkTotalMs,
+            budgetMs = settings.analysisBudgetMs.toDouble(),
+            availableModels = ModelZoo.ALL_MODELS,
+            gpuModels = settings.gpuStableModels,
+            cores = profile.build.cores,
+            ramTotalMb = profile.build.ramTotalMb,
+            manualTier = override,
+        )
+        settings.setTierPlan(plan, key)
+        return plan
+    }
+
+    private var tierReloading = false
+
+    /** Rebuild the model zoo after a manual tier change, without a service restart. */
+    private fun reloadTier(reason: String) {
+        if (tierReloading) return
+        tierReloading = true
+        FLog.i("reloading tier: $reason")
+        executor.execute {
+            try {
+                synchronized(audioLock) {
+                    runCatching { capture?.stop() }
+                    capture = null
+                }
+                runCatching { zoo?.close() }
+                zoo = null
+                pipelineStarted.set(false)
+                tierReloading = false
+                startPipeline()
+            } catch (e: Throwable) {
+                tierReloading = false
+                FLog.e("tier reload failed", e)
+                markDegraded("tier reload failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun markDegraded(reason: String) {
+        if (degraded && degradedReason == reason) return
+        degraded = true
+        degradedReason = reason
+        FLog.w("node DEGRADED: $reason")
+        NodeState.update { it.copy(degraded = true, degradedReason = reason) }
+    }
+
+    private fun clearDegraded() {
+        if (!degraded) return
+        degraded = false
+        degradedReason = ""
+        NodeState.update { it.copy(degraded = false, degradedReason = "") }
+    }
+
+    private fun reprobeDevice() {
+        executor.execute {
+            val profile = deviceStore.current(force = true)
+            deviceProfile = profile
+            NodeState.update {
+                it.copy(
+                    deviceHeadline = profile.headline(),
+                    freeStorageMb = profile.build.freeStorageMb,
+                    capabilitiesMissing = profile.missing,
+                )
+            }
+            sendSystem("capability_probe", "INFO", "device profile re-probed: ${profile.headline()}")
+        }
+    }
+
+    private fun startContinuityTest() {
+        if (!pipelineStarted.get()) {
+            notification.warning("Continuity test", "Start monitoring before running the continuity test.")
+            return
+        }
+        continuityStartMs = System.currentTimeMillis()
+        continuityWindowsStart = windowCounter
+        continuityGapsStart = continuityGaps
+        continuityRunning = true
+        val minutes = settings.continuityMinutes
+        notification.warning(
+            "Continuity test started",
+            "Turn the screen off and leave the phone alone for $minutes min. Audio windows are counted.",
+        )
+        sendSystem("continuity", "INFO", "continuity test started for $minutes min")
+    }
+
+    private fun finishContinuityTest(reason: String) {
+        if (!continuityRunning) return
+        continuityRunning = false
+        val elapsedMs = (System.currentTimeMillis() - continuityStartMs).coerceAtLeast(1)
+        val windows = windowCounter - continuityWindowsStart
+        val gaps = continuityGaps - continuityGapsStart
+        val expected = (elapsedMs / 500.0).toInt().coerceAtLeast(1)
+        val coverage = windows.toDouble() / expected
+        val pass = coverage >= 0.90 && gaps == 0L
+        val result = JSONObject()
+            .put("started_utc", TimeUtils.isoUtc(continuityStartMs))
+            .put("elapsed_s", elapsedMs / 1000)
+            .put("windows", windows)
+            .put("expected_windows", expected)
+            .put("gap_events", gaps)
+            .put("coverage", round(coverage, 3))
+            .put("outcome", if (pass) "PASS" else "FAIL")
+            .put("reason", reason)
+            .put(
+                "note",
+                "The user controls the screen state; this measures whether audio windows kept " +
+                    "arriving. Recheck OEM protections if coverage is low."
+            )
+        settings.continuityResultJson = result.toString(2)
+        recoveryLog.record(
+            "screen_off", if (pass) "PASS" else "FAIL",
+            "coverage %.0f%%, gaps=%d, %ds".format(coverage * 100, gaps, elapsedMs / 1000),
+        )
+        NodeState.update { it.copy(continuity = settings.continuityResultJson) }
+        notification.warning(
+            "Continuity test ${if (pass) "passed" else "failed"}",
+            "Audio coverage %.0f%% with %d gap events over %ds."
+                .format(coverage * 100, gaps, elapsedMs / 1000),
+        )
+        sendSystem(
+            "continuity", if (pass) "INFO" else "WARNING",
+            "continuity %s: coverage %.0f%%, gaps=%d".format(
+                if (pass) "PASS" else "FAIL", coverage * 100, gaps
+            ),
+        )
+    }
+
+    private fun liveFreeStorageMb(): Int = runCatching {
+        (android.os.StatFs(filesDir.absolutePath).availableBytes / (1024 * 1024)).toInt()
+    }.getOrDefault(deviceProfile?.build?.freeStorageMb ?: 0)
 
     private fun startCapture() {
         if (!running.get() || !micForeground) return
@@ -454,7 +702,16 @@ class NodeService : Service(), AudioCapture.Listener {
         windowCounter++
         val gov = lastGovernor ?: return
         if (gov.pauseInference) return
-        val stride = max(gov.stride, adaptiveStride)
+        val rp = runtimePlan
+        if (rp?.streamOnly == true) {
+            // Raw chunks keep streaming; skipping inference is what keeps the
+            // node inside its latency budget when even tier C is too slow.
+            skippedStride++
+            return
+        }
+        val hopStride = max(1, ((rp?.hopS ?: 0.5) / 0.5).roundToInt())
+        adaptiveStride = hopStride
+        val stride = max(gov.stride, hopStride)
         if (windowCounter % stride != 0L) {
             skippedStride++
             return
@@ -493,19 +750,54 @@ class NodeService : Service(), AudioCapture.Listener {
 
     override fun onState(state: AudioCapture.State, detail: String) {
         if (state == AudioCapture.State.RUNNING || state == AudioCapture.State.ERROR) {
+            val c = capture
             NodeState.update {
                 it.copy(
-                    activeInput = capture?.activeInput() ?: detail,
-                    effects = capture?.lastEffects()?.summary() ?: detail,
+                    activeInput = c?.activeInput() ?: detail,
+                    effects = c?.lastEffects()?.summary() ?: detail,
+                    audioRate = c?.captureSampleRate() ?: 16000,
+                    resampling = c?.isResampling() ?: false,
                 )
             }
         }
+        if (state == AudioCapture.State.RUNNING) clearDegraded()
     }
 
     override fun onError(message: String, fatal: Boolean) {
         FLog.e("audio error: $message")
         NodeState.update { it.copy(lastError = message) }
-        if (fatal) handler.post { restartAudio(message) }
+        if (fatal) {
+            markDegraded("audio capture failed: $message")
+            handler.post { restartAudio(message) }
+        }
+    }
+
+    override fun onGap(gapMs: Long, reason: String) {
+        continuityGaps++
+        FLog.w("audio gap ${gapMs}ms ($reason)")
+        NodeState.update {
+            it.copy(continuity = "gap ${gapMs}ms at ${TimeUtils.isoUtc()} ($reason)")
+        }
+        if (gapMs > 10_000L) {
+            markDegraded("audio gap ${gapMs / 1000}s: $reason")
+            sendSystem("audio_gap", "WARNING", "audio gap ${gapMs / 1000}s: $reason")
+        }
+    }
+
+    override fun onZeroSignal(durationMs: Long) {
+        FLog.w("zero signal for ${durationMs}ms")
+        markDegraded("microphone produced digital silence for ${durationMs / 1000}s")
+        notification.warning(
+            "Microphone produced no signal",
+            "The input returned ${durationMs / 1000}s of digital silence. Check the mic or headset.",
+        )
+    }
+
+    override fun onRouteChanged(input: String) {
+        FLog.i("audio route changed to $input")
+        NodeState.update { it.copy(activeInput = input) }
+        // checkAudioRoute() on the next heartbeat restarts capture if the
+        // preferred device id changed.
     }
 
     private fun restartAudio(reason: String) {
@@ -607,7 +899,7 @@ class NodeService : Service(), AudioCapture.Listener {
         transport.sendScores(buildScoresPayload(timestampMs, result))
 
         val total = result.inferenceMs["total"] ?: 0.0
-        adaptStride(total)
+        applyLatencyPlan(total)
         NodeState.update {
             it.copy(
                 lastWindow = result,
@@ -617,24 +909,51 @@ class NodeService : Service(), AudioCapture.Listener {
                 queueSize = transport.queueSize(),
                 alertsSent = transport.sentEvents,
                 smsStatus = settings.lastSmsStatus,
-                adaptiveStride = adaptiveStride,
+                adaptiveStride = max(1, ((runtimePlan?.hopS ?: 0.5) / 0.5).roundToInt()),
                 collection = collection.stats(),
                 backendOnline = transport.online,
             )
         }
     }
 
-    private fun adaptStride(totalMs: Double) {
+    /**
+     * Runtime latency governor. Escalation order: lengthen hop -> disable
+     * anomaly M6 -> disable BirdNET M8 -> streaming-only. Relaxation is
+     * hysteretic and mirrors the same order.
+     */
+    private fun applyLatencyPlan(totalMs: Double) {
+        val base = tierPlan ?: return
+        val current = runtimePlan ?: LatencyBudget.initial(base).also { runtimePlan = it }
         val budget = settings.analysisBudgetMs.toDouble()
-        if (totalMs > budget) {
-            adaptiveStride = min(8, adaptiveStride + 1)
-            fastWindows = 0
-        } else if (totalMs < budget * 0.5) {
-            fastWindows++
-            if (fastWindows >= 10) {
-                adaptiveStride = max(1, adaptiveStride - 1)
-                fastWindows = 0
+        if (totalMs < budget * 0.5) fastWindows++ else fastWindows = 0
+        val next = LatencyBudget.adjust(
+            current = current,
+            base = base,
+            measuredMs = totalMs,
+            budgetMs = budget,
+            hopLevels = HOP_LEVELS,
+            consecutiveFast = fastWindows,
+        )
+        if (next == current) return
+        runtimePlan = next
+        fastWindows = 0
+        FLog.i("latency plan: ${next.reason}")
+        NodeState.update {
+            it.copy(
+                runtimeHopS = next.hopS,
+                runtimeReason = next.reason,
+                streamingOnly = next.streamOnly,
+                adaptiveStride = max(1, (next.hopS / 0.5).roundToInt()),
+            )
+        }
+        if (next.streamOnly && !current.streamOnly) {
+            if (settings.streamingUrl.isNotBlank()) {
+                settings.streamingEnabled = true
+                streaming.start(settings.streamingUrl)
+                NodeState.update { it.copy(streaming = true) }
             }
+            notification.warning("Streaming-only fallback", next.reason)
+            sendSystem("latency_fallback", "WARNING", next.reason)
         }
     }
 
@@ -674,8 +993,10 @@ class NodeService : Service(), AudioCapture.Listener {
             .put("m7_human", round(result.m7.toDouble(), 3))
             .put("m9_fusion", rounded(result.m9))
             .put("device", JSONObject()
+                .put("manufacturer", Build.MANUFACTURER)
                 .put("model", Build.MODEL)
                 .put("sdk", Build.VERSION.SDK_INT)
+                .put("tier", tierPlan?.tier?.name ?: "unset")
                 .put("input", capture?.activeInput() ?: "unknown")
                 .put("governor", lastGovernor?.level?.name ?: "NORMAL"))
         val payload = JSONObject()
@@ -780,6 +1101,20 @@ class NodeService : Service(), AudioCapture.Listener {
                 soak = soak.isActive(),
                 collection = collection.stats(),
                 streaming = streaming.isConnected(),
+                deviceHeadline = deviceProfile?.headline() ?: "",
+                tier = tierPlan?.tier?.name ?: "—",
+                tierReason = tierPlan?.reason ?: "not selected yet",
+                runtimeHopS = runtimePlan?.hopS ?: 0.5,
+                runtimeReason = runtimePlan?.reason ?: "",
+                degraded = degraded,
+                degradedReason = degradedReason,
+                clockOffsetMs = clockOffsetMs,
+                freeStorageMb = liveFreeStorageMb(),
+                audioRate = capture?.captureSampleRate() ?: 16000,
+                resampling = capture?.isResampling() ?: false,
+                capabilitiesMissing = deviceProfile?.missing ?: emptyList(),
+                networkTransport = connectivity.transport(),
+                streamingOnly = runtimePlan?.streamOnly ?: false,
             )
         }
 
@@ -791,6 +1126,32 @@ class NodeService : Service(), AudioCapture.Listener {
         soak.sample(battery, gov.level.name, droppedFrames, transport.queueSize(), transport.sentEvents)
         checkSoakComplete()
         checkAudioRoute()
+
+        // A tier change in Settings takes effect without restarting the service.
+        val override = settings.tierOverride
+        val currentTier = tierPlan?.tier
+        if (override != null && currentTier != null && override != currentTier) {
+            reloadTier("manual override ${override.name}")
+        }
+
+        // Continuity test: finish when the configured window elapses.
+        if (continuityRunning &&
+            now - continuityStartMs >= settings.continuityMinutes * 60_000L
+        ) {
+            finishContinuityTest("completed after ${settings.continuityMinutes} min")
+        }
+
+        // Clock offset is reported, never applied. Query at most every 30 min.
+        if (now - lastClockSyncMs >= 30 * 60_000L) {
+            lastClockSyncMs = now
+            clockExecutor.execute {
+                val sync = SntpClient.query()
+                if (sync != null) {
+                    clockOffsetMs = sync.offsetMs
+                    NodeState.update { it.copy(clockOffsetMs = sync.offsetMs) }
+                }
+            }
+        }
 
         if (now - lastHeartbeatMs < settings.heartbeatS * 1000L) return
         lastHeartbeatMs = now
@@ -840,7 +1201,29 @@ class NodeService : Service(), AudioCapture.Listener {
             .put("adaptive_stride", adaptiveStride)
             .put("protections_ok", protection.check().allOk)
             .put("android_sdk", Build.VERSION.SDK_INT)
-            .put("device", Build.MODEL)
+            .put("device_model", Build.MODEL)
+            .put("device", deviceProfile?.summaryJson() ?: JSONObject()
+                .put("manufacturer", Build.MANUFACTURER)
+                .put("model", Build.MODEL)
+                .put("sdk", Build.VERSION.SDK_INT))
+            .put("tier", tierPlan?.tier?.name ?: "unset")
+            .put("tier_reason", tierPlan?.reason ?: "not measured")
+            .put("tier_plan", tierPlan?.toJson() ?: JSONObject())
+            .put("runtime", JSONObject()
+                .put("hop_s", runtimePlan?.hopS ?: 0.5)
+                .put("m6_every", runtimePlan?.m6Every ?: 0)
+                .put("m8_duty", runtimePlan?.m8Duty ?: 0)
+                .put("stream_only", runtimePlan?.streamOnly ?: false)
+                .put("reason", runtimePlan?.reason ?: ""))
+            .put("degraded", degraded)
+            .put("degraded_reason", degradedReason)
+            .put("clock_offset_ms", clockOffsetMs ?: JSONObject.NULL)
+            .put("free_storage_mb", liveFreeStorageMb())
+            .put("continuity", settings.continuityResultJson.ifBlank { JSONObject.NULL })
+            .put("audio_rate", capture?.captureSampleRate() ?: 16000)
+            .put("resampling", capture?.isResampling() ?: false)
+            .put("network_transport", connectivity.transport())
+            .put("capabilities_missing", JSONArray(deviceProfile?.missing ?: emptyList<String>()))
         val scores = lastWindow?.let { result ->
             JSONObject()
                 .put("m2", round(result.m2.toDouble(), 3))
@@ -980,6 +1363,12 @@ class NodeService : Service(), AudioCapture.Listener {
         const val ACTION_COLLECT_OFF = "org.forestear.node.COLLECT_OFF"
         const val ACTION_STREAM_ON = "org.forestear.node.STREAM_ON"
         const val ACTION_STREAM_OFF = "org.forestear.node.STREAM_OFF"
+        const val ACTION_CONTINUITY_START = "org.forestear.node.CONTINUITY_START"
+        const val ACTION_CONTINUITY_STOP = "org.forestear.node.CONTINUITY_STOP"
+        const val ACTION_REPROBE = "org.forestear.node.REPROBE"
+
+        /** Hop levels the runtime latency governor may step through. */
+        val HOP_LEVELS = listOf(0.5, 1.0, 2.0, 4.0)
 
         fun start(context: Context) {
             val intent = Intent(context, NodeService::class.java).setAction(ACTION_START)

@@ -14,7 +14,7 @@
 #   BACKEND_URL=http://192.168.1.20:8000 ./self_test.sh
 set -uo pipefail
 
-PKG="org.forestear.node"
+PKG="${FORESTEAR_PACKAGE:-org.forestear.node}"
 ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
 [[ -x "$ADB" ]] || ADB="$(command -v adb || true)"
 [[ -n "$ADB" ]] || { echo "adb not found" >&2; exit 1; }

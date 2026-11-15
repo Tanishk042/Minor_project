@@ -10,7 +10,7 @@
 # (or ANDROID_HOME), and one device visible in `adb devices`.
 set -euo pipefail
 
-PKG="org.forestear.node"
+PKG="${FORESTEAR_PACKAGE:-org.forestear.node}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="$(cd "$HERE/.." && pwd)"
 

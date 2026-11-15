@@ -11,6 +11,12 @@ import org.forestear.node.audio.AudioDeviceManager
 import org.forestear.node.audio.MicLevels
 import org.forestear.node.audio.MicProbe
 import org.forestear.node.config.AppConfig
+import org.forestear.node.device.CompatibilityReport
+import org.forestear.node.device.DeviceProfile
+import org.forestear.node.device.DeviceProfileStore
+import org.forestear.node.device.OemProfileTable
+import org.forestear.node.device.RecoveryLog
+import org.forestear.node.device.ReportCheck
 import org.forestear.node.features.FeatureAssets
 import org.forestear.node.model.ModelZoo
 import org.forestear.node.power.BatteryMonitor
@@ -23,6 +29,7 @@ import org.forestear.node.util.Binary
 import org.forestear.node.util.FLog
 import org.forestear.node.util.TimeUtils
 import androidx.core.content.ContextCompat
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -56,6 +63,25 @@ class SelfTest(private val context: Context, private val settings: SettingsStore
     fun run(progress: (String) -> Unit = {}): SelfTestReport {
         val items = mutableListOf<SelfTestItem>()
         val devices = AudioDeviceManager(context)
+        val profile = DeviceProfileStore(context).current()
+
+        progress("capabilities")
+        items += SelfTestItem(
+            "capabilities", "Device capability probe",
+            if (profile.missing.isEmpty()) TestStatus.PASS else TestStatus.WARN,
+            profile.headline() + if (profile.missing.isEmpty()) ""
+            else " · missing: ${profile.missing.joinToString(", ")}"
+        )
+
+        progress("audio inputs")
+        val inputs = devices.inputDevices()
+        items += SelfTestItem(
+            "audio_inputs", "Audio input enumeration",
+            if (inputs.isEmpty()) TestStatus.WARN else TestStatus.PASS,
+            inputs.joinToString { "${devices.describe(it).name} (${devices.describe(it).typeLabel})" }
+                .ifBlank { "no inputs enumerated" } +
+                " | native=${profile.audio.nativeSampleRate} Hz, requested=16000 Hz"
+        )
 
         progress("microphone")
         items += micTest(devices)
@@ -65,7 +91,14 @@ class SelfTest(private val context: Context, private val settings: SettingsStore
             "headset", "Wired headset detection",
             if (headset != null) TestStatus.PASS else TestStatus.WARN,
             if (headset != null) "detected: ${devices.describe(headset).name}"
-            else "no TRRS headset detected (built-in mic will be used)"
+            else "no 3.5 mm headset detected (built-in mic will be used)"
+        )
+        val usb = devices.usbMic()
+        items += SelfTestItem(
+            "usb_mic", "USB microphone detection",
+            if (usb != null) TestStatus.PASS else TestStatus.WARN,
+            if (usb != null) "detected: ${devices.describe(usb).name}"
+            else "no USB microphone attached"
         )
 
         progress("permissions")
@@ -76,11 +109,12 @@ class SelfTest(private val context: Context, private val settings: SettingsStore
         }
 
         progress("background protections")
-        val protection = ProtectionChecker(context, settings).check()
+        val protectionChecker = ProtectionChecker(context, settings)
+        val protection = protectionChecker.check()
         items += SelfTestItem(
-            "protections", "OxygenOS background protections",
+            "protections", "${protectionChecker.profile().displayName} background protections",
             if (protection.allOk) TestStatus.PASS else TestStatus.WARN,
-            if (protection.allOk) "all checks confirmed"
+            if (protection.allOk) "all required checks confirmed"
             else "missing: ${protection.missing.joinToString { it.title }}"
         )
 
@@ -258,4 +292,36 @@ class SelfTest(private val context: Context, private val settings: SettingsStore
             )
         }
     }
+
+    /** Markdown compatibility report built from what the OS reported and this run. */
+    fun compatibilityMarkdown(report: SelfTestReport): String {
+        val profile = DeviceProfileStore(context).current()
+        val checks = report.items.map {
+            ReportCheck(it.id, it.title, it.status.name, it.detail)
+        }
+        val benchmark = settings.lastBenchmarkTotalMs
+        val oem = runCatching { OemProfileTable.load(AndroidAssetSource(context)) }.getOrNull()
+            ?.forDevice(profile.build.manufacturer, profile.build.brand, profile.build.model)
+        return CompatibilityReport.build(
+            profile = profile,
+            tier = settings.tierPlan(),
+            checks = checks,
+            recovery = RecoveryLog(context).load(),
+            benchmarkMs = if (benchmark.isFinite() && benchmark > 0) {
+                mapOf("pipeline" to benchmark)
+            } else emptyMap(),
+            oemProfile = oem,
+        )
+    }
+
+    /** Writes `docs/compatibility_report_<model>.md` and returns the file. */
+    fun saveCompatibilityReport(report: SelfTestReport): File? = runCatching {
+        val profile = DeviceProfileStore(context).current()
+        val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "docs")
+        dir.mkdirs()
+        val file = File(dir, CompatibilityReport.fileName(profile))
+        file.writeText(compatibilityMarkdown(report))
+        FLog.i("compatibility report written: ${file.absolutePath}")
+        file
+    }.onFailure { FLog.w("compatibility report write failed: ${it.message}") }.getOrNull()
 }

@@ -6,4 +6,5 @@
     <string name="notification_text">Acoustic monitoring active</string>
     <string name="notification_mic_paused">Microphone paused — open the app to resume</string>
     <string name="notification_stop">Stop</string>
+    <string name="notification_open">Open app</string>
 </resources>

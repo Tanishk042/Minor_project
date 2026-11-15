@@ -68,7 +68,7 @@ fun StatusScreen(
         val missing = status.protection?.missing.orEmpty()
         if (missing.isNotEmpty()) {
             InfoBanner(
-                "OxygenOS may throttle or kill this node. Missing: " +
+                "This phone's maker may throttle or kill the node. Missing: " +
                     missing.joinToString { it.title } + ". Open Setup to fix.",
                 ForestAmber,
                 "Kill protection incomplete",
@@ -76,6 +76,13 @@ fun StatusScreen(
             OutlinedButton(onClick = onOpenSetup, modifier = Modifier.fillMaxWidth()) {
                 Text("Open setup checklist")
             }
+        }
+        if (status.degraded) {
+            InfoBanner(
+                status.degradedReason.ifBlank { "the node is running in a degraded state" },
+                ForestRed,
+                "Node DEGRADED",
+            )
         }
 
         HeroCard(status, onStart, onStop, onRequestMic, permissions)
@@ -161,8 +168,7 @@ fun StatusScreen(
             }
         }
 
-        SectionCard(title = "Power and thermal") {
-            val b = status.battery
+        SectionCard(title = "Power and thermal") {            val b = status.battery
             if (b == null) {
                 Text("Waiting for battery snapshot.", fontSize = 13.sp, color = ForestMuted)
             } else {
@@ -182,6 +188,52 @@ fun StatusScreen(
                         else -> ForestRed
                     },
                 )
+            }
+        }
+
+        SectionCard(
+            title = "Device and performance",
+            subtitle = "Probed from this handset. Nothing here is assumed from a model name.",
+        ) {
+            KeyValueRow("Device", status.deviceHeadline.ifBlank { "probing…" })
+            KeyValueRow(
+                "Tier",
+                "${status.tier} — ${status.tierReason}",
+                when (status.tier) {
+                    "A" -> ForestGreen
+                    "B" -> ForestGreen
+                    "C" -> ForestAmber
+                    "D" -> ForestRed
+                    else -> ForestMuted
+                },
+            )
+            KeyValueRow(
+                "Runtime hop",
+                "%.1f s — %s".format(Locale.US, status.runtimeHopS,
+                    status.runtimeReason.ifBlank { "nominal" }),
+            )
+            if (status.streamingOnly) {
+                KeyValueRow("Streaming-only", "inference paused; raw PCM is being streamed", ForestRed)
+            }
+            KeyValueRow(
+                "Audio capture",
+                "${status.audioRate} Hz" + if (status.resampling) " (resampled to 16 kHz)" else " (native 16 kHz)",
+            )
+            KeyValueRow("Network", status.networkTransport)
+            KeyValueRow("Free storage", "${status.freeStorageMb} MB")
+            KeyValueRow(
+                "Clock offset",
+                status.clockOffsetMs?.let { "${it} ms (reported only, not applied)" } ?: "not measured",
+            )
+            if (status.capabilitiesMissing.isNotEmpty()) {
+                KeyValueRow(
+                    "Missing capabilities",
+                    status.capabilitiesMissing.joinToString(", "),
+                    ForestAmber,
+                )
+            }
+            if (status.continuity.isNotBlank()) {
+                KeyValueRow("Continuity", status.continuity.take(120))
             }
         }
 

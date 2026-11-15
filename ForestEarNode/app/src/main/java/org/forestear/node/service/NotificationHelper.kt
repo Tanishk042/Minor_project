@@ -86,10 +86,43 @@ class NotificationHelper(private val context: Context) {
         runCatching { manager.notify(WARNING_ID, n) }
     }
 
+    /**
+     * High-priority re-entry notification used when the OS refused to restart
+     * the microphone in the background. Uses a full-screen intent only when the
+     * platform says it is permitted; otherwise it is a normal heads-up alert.
+     */
+    fun reentry(title: String, text: String) {
+        val open = PendingIntent.getActivity(
+            context, 3,
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+            .setSmallIcon(R.drawable.ic_stat_forestear)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .addAction(0, context.getString(R.string.notification_open), open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+        val allowed = if (Build.VERSION.SDK_INT >= 34) {
+            runCatching { manager.canUseFullScreenIntent() }.getOrDefault(false)
+        } else {
+            true
+        }
+        if (allowed) builder.setFullScreenIntent(open, true)
+        runCatching { manager.notify(REENTRY_ID, builder.build()) }
+    }
+
     companion object {
         const val CHANNEL_SERVICE = "forestear_service"
         const val CHANNEL_ALERTS = "forestear_alerts"
         const val SERVICE_ID = 1001
         const val WARNING_ID = 1002
+        const val REENTRY_ID = 1003
     }
 }

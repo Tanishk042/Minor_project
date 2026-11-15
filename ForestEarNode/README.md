@@ -3,8 +3,15 @@
 Fully on-phone acoustic node for the ForestEar project. It runs the same
 9-model ensemble as `forestear/edge_agent`, makes decisions locally, and sends
 only JSON alerts/telemetry (plus optional 5 s non-speech clips on the Python
-agent). Built for one retired **OnePlus Nord CE 2 Lite 5G**, but it runs on any
-Android 8.0+ device with a microphone.
+agent). It runs on **any Android 8.0+ device with a microphone**; the OnePlus
+Nord CE 2 Lite 5G is one entry in the OEM profile table, not a code path.
+
+A **Device Adaptation Layer** probes the handset at first launch and after every
+app update, benchmarks the bundled models, chooses a performance tier, and
+degrades honestly when a capability is missing. See
+[`docs/phone_setup_generic.md`](docs/phone_setup_generic.md),
+[`docs/oem_guides.md`](docs/oem_guides.md) and
+[`docs/supported_devices.md`](docs/supported_devices.md).
 
 ```
 AudioRecord 16 kHz mono ──► log-mel 64×98 + handcrafted
@@ -73,15 +80,22 @@ model, feature formula or config changes.
 ./gradlew :app:testDebugUnitTest
 ```
 
-11 tests, all passing on this checkout:
+**79 tests across 12 suites, all passing on this checkout:**
 
-| Test | What it locks down | Measured result |
-|---|---|---|
-| `LogMelParityTest` | Kotlin log-mel vs Python golden, all 6 windows | max abs diff **1.01e-6** |
-| `HandcraftedParityTest` | rms/crest/flux/flatness/onset/ZCR vs Python | max abs diff **2.88e-8** |
-| `FusionTreesParityTest` | binary M9 trees + isotonic vs Python `predict_proba` | max abs diff **1.11e-16** |
-| `DecisionEngineTest` | golden decision sequences, rain veto, no over-veto | 3 tests pass |
-| `ConfigTest` | asset contract (sample rate, shapes, 9 models, 47 features) | 5 tests pass |
+| Suite | What it locks down |
+|---|---|
+| `LogMelParityTest` | Kotlin log-mel vs Python golden, all 6 windows — max abs diff **1.01e-6** |
+| `HandcraftedParityTest` | rms/crest/flux/flatness/onset/ZCR vs Python — max abs diff **2.88e-8** |
+| `FusionTreesParityTest` | binary M9 trees + isotonic vs Python `predict_proba` — max abs diff **1.11e-16** |
+| `DecisionEngineTest` | golden decision sequences, rain veto, no over-veto |
+| `ConfigTest` | asset contract (sample rate, shapes, 9 models, 47 features) |
+| `TierSelectorTest` | A/B/C/D policy, hardware/model guards, manual override, JSON round-trip |
+| `LatencyBudgetTest` | runtime hop → M6 → M8 → streaming-only escalation and hysteretic relaxation |
+| `DeviceProfileTest` | profile JSON round-trip with null capabilities, `headline`, `profileKey`, heartbeat summary, mock profile |
+| `OemProfilesTest` | OEM table loader, known-device → manufacturer → generic matching, `{package}` expansion, shipped asset |
+| `ResamplerTest` | identity scaling, 48k→16k length, DC continuity across blocks, rate negotiation |
+| `SntpTest` | 48-byte request, offset/delay maths on a synthetic reply, zero/short timestamp rejection |
+| `CompatibilityReportTest` | unmeasured tier, NOT RUN recovery rows, pipe escaping, file slugs |
 
 ### Instrumented (needs a device/emulator)
 
@@ -93,6 +107,9 @@ model, feature formula or config changes.
   scores with the Python vectors.
 - `LatencyTest` warms up and times 10 full-pipeline windows, enforcing a
   1500 ms sanity budget.
+- `DeviceAdaptationTest` exercises the probe, a deliberately incomplete mock
+  profile, the shipped OEM table, the compatibility report and the
+  recovery recorder without a running service.
 
 **These instrumented tests are written but have not been run in this
 repository.** No on-phone latency, CPU or RAM number is claimed until you run
@@ -105,23 +122,59 @@ them and read the output. The laptop-side Python pipeline measured
 
 ### Audio
 
-- `AudioRecord` at 16 kHz mono 16-bit; prefers `UNPROCESSED`, falls back to
-  `MIC`; disables AGC/NS/AEC when available and logs availability.
-- 1.0 s window / 0.5 s hop, silence gate, clipping detection.
-- Automatic capture restart on read errors; restart and dropped-frame counters.
-- Built-in vs wired (USB-C → TRRS) input selection with per-input gain.
-- Calibration screen: live dBFS, peak, clipping, source/effects, gain.
+- `AudioRecord` mono 16-bit. It requests **16 kHz**; if the phone refuses that
+  rate it negotiates the nearest supported rate and resamples to 16 kHz in
+  `audio/Resampler.kt` (streaming linear interpolation, DC-continuous across
+  blocks). The active capture rate and whether resampling is on are shown in
+  Diagnostics and the heartbeat.
+- Prefers `UNPROCESSED`, falls back to `MIC`; tries to disable AGC/NS/AEC and
+  logs which effects were actually present (`EffectStatus`).
+- 1.0 s window / 0.5 s hop, silence gate, clipping detection, zero-signal
+  detector (a 10 s run of digital zeros is reported as a fatal capture fault
+  rather than being analysed as quiet forest).
+- Automatic capture restart on read errors; restart and dropped-frame counters;
+  `onGap` reports stalls with a reason.
+- Input choice: **Auto** (USB → wired → built-in), Built-in, 3.5 mm, USB. An
+  `AudioManager.AudioRecordingCallback` (API 29+) reports route changes, and the
+  app offers the switch instead of silently changing the input mid-deployment.
+  Calls and other apps taking the microphone surface as a capture gap and are
+  retried; they are not silently ignored.
+- Calibration (non-bar tab): live RMS/peak dBFS, clipping %, detected input,
+  effects, and a per-input gain (`builtin` / `headset` / `usb`).
+- Optional ambient collection is explicit opt-in, capped and rotated by bytes,
+  suspended while inference is paused, and **deletes a whole chunk** if human
+  presence is detected. No alert clips are stored on the phone.
 
 ### Models and features
 
 - Kotlin log-mel 64×98, handcrafted descriptors and FFT with Python parity.
 - TFLite runners handle float32 and int8 quantisation exactly like
-  `zoo.py`; XNNPACK by default, GPU delegate selectable per model.
+  `zoo.py`; LiteRT **CPU + XNNPACK is the default**, GPU delegate is selectable
+  per model and only kept when it is both faster and stable. The app does not
+  rely on NNAPI.
 - M9 fusion runs as a compact little-endian binary tree ensemble
   (`config/m9_trees.bin`, 1500 trees) plus isotonic calibration.
 - M8 BirdNET duty-cycled (1/10 by default) and excluded from alerts.
 - Adaptive hop: lengthened when a window exceeds the analysis budget, stepped
   back down after sustained fast windows.
+
+### Performance tiers and latency governor
+
+A benchmark with a warm-up pass times every bundled model and feeds
+`device/TierSelector.kt`:
+
+| Tier | Models | Hop | Selection rule |
+|---|---|---|---|
+| A | all 9 | 0.5 s | measured ≤60 % of budget, ≥4 cores, ≥2500 MB RAM, all models loaded |
+| B | all 9 | 1.0 s | measured ≤100 % of budget, all models loaded; M6/M8 duty-cycled |
+| C | core (M1–M5, M9) | 1–2 s | over budget, or a model failed to load |
+| D | core | long hop | far over budget; inference paused, raw PCM streamed |
+
+Before the first benchmark the app starts at **tier C**; a benchmark that does
+not produce a finite timing stays there. A manual override in Settings is always
+honoured, with a note when it exceeds the budget. `device/LatencyBudget.kt` runs
+at runtime: lengthen the hop → disable M6 → disable M8 → streaming-only, then
+relax after 12 fast windows. Every change is logged and shown on Status.
 
 ### Decision and transport
 
@@ -136,34 +189,74 @@ them and read the output. The laptop-side Python pipeline measured
 - SMS fallback: CRITICAL only, compact payload, dual-SIM subscription
   selection, persisted rate limit, delivery status.
 
-### Reliability
+### Reliability (Device Adaptation Layer)
 
-- Foreground service with microphone/dataSync types (Android 14 rules even on
-  Android 13), partial wake lock, boot receiver.
-- WorkManager (15 min) + AlarmManager (5 min) watchdog; `onTaskRemoved`
-  restart; explicit Stop disables auto-start and cancels watchdogs.
+- Foreground service with microphone/dataSync types, partial wake lock, boot
+  receiver. `POST_NOTIFICATIONS` (13+) and `FOREGROUND_SERVICE_MICROPHONE` (34+)
+  are declared; on API 29 only dataSync is used, and on older releases no type
+  is passed.
+- **The app does not assume a boot receiver or watchdog can restart the
+  microphone.** If a background start is refused, it posts a high-priority
+  notification (full-screen intent only when permitted), marks the node
+  `DEGRADED`, and says what to do. Android 14+ blocks a microphone FGS from
+  starting in the background, so opening the app once after reboot is expected.
+- WorkManager (15 min) + AlarmManager (5 min) watchdog; `onTaskRemoved` restart;
+  explicit Stop disables auto-start and cancels both watchdogs and WorkManager.
 - Persisted uptime and restart count in heartbeats (first launch excluded).
-- Battery exemption prompt using the proper intent plus verification;
-  persistent warning while protections are missing.
+- Capability probe at first launch and after every update writes
+  `device_profile.json`; a compact summary rides every heartbeat. Missing
+  capabilities are recorded in `missing`/`warnings`, never guessed, and never
+  crash the node. `MockCapabilities` provides a deterministic
+  missing-capability profile for tests.
+- OEM table (`assets/config/oem_profiles.json`, 10 families + the Nord CE 2
+  Lite) is data. Deep links are resolved before launch and wrapped in
+  try/catch; if none resolve the app opens app-details, then the standard
+  battery screen. Plain-language steps are the source of truth;
+  dontkillmyapp.com is linked.
+- Battery exemption is OS-verified; overlay is OS-verified; every other
+  maker switch is user-confirmed and labelled as such. Optional checks never
+  fail the overall protection state.
 - Thermal governor with hysteresis and low-battery modes; system events and
   notifications on CRITICAL/PAUSED and low/critical battery.
 - Battery CSV once a minute; heartbeats include charging, current, temperature,
-  thermal status, signal dBm and network type.
+  thermal status, signal dBm, network type, free storage, uptime, restart count,
+  and the SNTP clock offset (reported only; the system clock is never changed).
+- Connectivity callbacks drive the offline queue with backoff; a Wi-Fi-only
+  device runs fully and reports SMS as missing.
 
-### Diagnostics
+### Diagnostics and recovery
 
 - Hardware self-test: mic/clipping, headset, permissions, protections, network,
   backend, models, SMS, thermal — PASS/WARN/FAIL.
 - Per-model CPU vs GPU benchmark with mean/p95 latency, CPU %, RAM; writes
-  `benchmark.json` and persists the chosen delegate.
+  `benchmark.json` and persists the chosen delegate and tier.
 - 24 h soak mode with report (`soak_report.json`, `soak_samples.csv`).
+- Recovery-path recorder (`device/RecoveryPaths.kt`, `recovery_paths.json`) for
+  kill, swipe-away, reboot, boot receiver, screen-off and microphone theft.
+  Results are written through debug broadcasts so a kill test can record after
+  the service process has died. Unexercised paths print **NOT RUN**, never PASS.
+- Screen-off continuity test: user-driven; counts audio windows and gaps over a
+  chosen duration, passes at ≥90 % coverage with zero gaps, and stores the
+  result for the compatibility report.
+- Generated `docs/compatibility_report_<model>.md` per handset: measured tier
+  and timings only when measured, missing capabilities listed, recovery rows
+  verbatim, and an explicit "what this report does not claim" section.
 - Live spectrogram, per-class score bars, threat score, queue/back-end state.
 
 ### UI
 
 Single-activity Jetpack Compose with bottom tabs **Status / Setup / Diagnose /
-Settings / Tools**, plus Calibration. The Setup wizard is OxygenOS-aware and
-links to the OEM screens adb cannot change.
+Settings / Tools**, plus Calibration. Layout adapts to the screen; nothing
+assumes a fixed resolution.
+
+The first-run wizard has seven steps with a live checklist: permissions, battery
+optimisation (verified), OEM protections (user-confirmed, OEM guide inline),
+screen-off continuity, backend/node identity, audio input + calibration, and
+finish + benchmark. Verified items are checked by the OS; everything else is
+marked "confirm manually". Settings commit live and cover node ID, backend,
+token, thresholds, tier override, input, coordinates, SMS and the developer
+mock/collection toggles. Configuration exports/imports as JSON (schema `1`,
+counters/logs/device profile excluded).
 
 ---
 
@@ -171,9 +264,13 @@ links to the OEM screens adb cannot change.
 
 ```
 app/src/main/java/org/forestear/node/
-  audio/        AudioCapture, AudioDeviceManager, MicProbe, WavWriter, CollectionRecorder
+  audio/        AudioCapture, AudioDeviceManager, MicProbe, Resampler, WavWriter,
+                CollectionRecorder
   config/       AppConfig (asset-driven)
   decision/     DecisionConfig, DecisionEngine
+  device/       DeviceProbe/DeviceProfile/DeviceProfileStore, TierSelector,
+                LatencyBudget, OemProfiles, OemIntents, RecoveryPaths,
+                CompatibilityReport, ClockSync
   diagnostics/  Benchmark, SelfTest, SoakTracker
   features/     Fft, FeatureAssets, LogMel, Handcrafted
   location/     LocationProvider (platform or fixed)
@@ -191,7 +288,10 @@ app/src/main/java/org/forestear/node/
 
 ## adb control and helper scripts
 
-See `android/scripts/`:
+See `android/scripts/`. All scripts accept `FORESTEAR_PACKAGE` (default
+`org.forestear.node`); the broadcast scripts also accept
+`FORESTEAR_ACTION_PREFIX` because actions are manifest constants, not derived
+from the application id.
 
 ```bash
 android/scripts/install.sh
@@ -201,7 +301,13 @@ android/scripts/self_test.sh
 android/scripts/capture_logs.sh [seconds]
 android/scripts/pull_collection.sh [--clear]
 android/scripts/soak.sh --start|--status|--watch N|--stop|--report
+android/scripts/recovery_test.sh status|kill|swipe|reboot|screen-off|record|report|clear
 ```
+
+`recovery_test.sh` performs the action, observes whether `NodeService` is alive,
+and records PASS / FAIL / NOT RUN through a debug broadcast. `am kill` being
+refused is recorded as NOT RUN; `boot_receiver` on Android 14+ may legitimately
+record FAIL.
 
 Control actions (also usable from adb):
 
@@ -210,7 +316,7 @@ adb shell am broadcast -a org.forestear.node.START \
   -n org.forestear.node/.service.ControlReceiver
 adb shell am broadcast -a org.forestear.node.STOP \
   -n org.forestear.node/.service.ControlReceiver
-# SOAK_ON/OFF, COLLECT_ON/OFF, STREAM_ON/OFF likewise
+# SOAK_ON/OFF, COLLECT_ON/OFF, STREAM_ON/OFF, CONTINUITY_*, REPROBE likewise
 ```
 
 Raw PCM receiver for the laptop:
@@ -220,26 +326,53 @@ python android/tools/stream_receiver.py --port 8765
 # set streaming URL to ws://<laptop-lan-ip>:8765/stream
 ```
 
+Docs generated from the OEM JSON (do not hand-edit):
+
+```bash
+python3 android/tools/generate_oem_docs.py
+# -> docs/oem_guides.md, docs/supported_devices.md
+```
+
 ---
 
 ## Honest limitations
 
 - **Instrumented parity/latency tests have not been run here.** JVM parity is
-  measured; on-phone model behaviour is not yet measured in this repository.
+  measured; on-phone model behaviour, latency, CPU and RAM are not yet measured
+  in this repository. The laptop-side Python pipeline measured **5.56 ms/hop**;
+  that number is not a phone measurement.
+- **No handset has a compatibility report in this checkout.** Recovery paths,
+  thermal behaviour, SMS and 24 h soak results are unrun until you execute the
+  tools on a device. `docs/supported_devices.md` says so explicitly.
 - The golden synthetic gunshot window produces M2 **0.906** but M9 gunshot
   **0.131** / benign **0.869**. This is out-of-distribution fusion behaviour on
   a synthetic impulse, not a bug in the port; it is reproduced identically by
   the Python pipeline and is documented rather than hidden.
 - The phone's microphone frequency response is not characterised; built-in
   processing may differ from the training data when `UNPROCESSED` is missing.
+  Resampling is linear interpolation, adequate for 64-band log-mel but not a
+  studio-grade converter.
 - The thermal governor uses battery temperature, not SoC junction temperature;
   it is conservative and may throttle earlier than the SoC requires.
 - The M8 BirdNET model is fed time-tiled 16 kHz audio; its labels/indices are
   used for biodiversity only and are not part of the alert decision.
 - SMS delivery depends on carrier, SIM credit and OEM power management; it is
   a fallback, not a guarantee.
-- OxygenOS auto-launch/background controls cannot be set by adb; the operator
-  must confirm them in the wizard.
+- OEM auto-launch/background/Recents-lock switches have no public read API.
+  The app records user confirmation, not verification.
+- Android 14+ can require a manual app open after reboot; Android 15 forbids a
+  boot receiver from starting a microphone FGS. This is a platform rule, and the
+  app reports DEGRADED instead of pretending it recovered.
+- Detection accuracy was measured on the Python evaluation set, not on any phone
+  microphone.
 
-See `forestear/docs/phone_setup_nord_ce2_lite.md` and
-`forestear/docs/HARDWARE.md` for deployment guidance.
+## Docs
+
+- [`docs/phone_setup_generic.md`](docs/phone_setup_generic.md) — setup for any
+  Android 8–15 device.
+- [`docs/oem_guides.md`](docs/oem_guides.md) — generated per-OEM steps.
+- [`docs/supported_devices.md`](docs/supported_devices.md) — generated device
+  matrix and qualification procedure.
+- `forestear/docs/phone_setup_nord_ce2_lite.md` — the Nord CE 2 Lite as a worked
+  example, not a separate code path.
+- `forestear/docs/HARDWARE.md` — deployment guidance.

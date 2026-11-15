@@ -72,8 +72,8 @@ fun CalibrationScreen(
 
     val deviceList = remember(deviceEpoch) { manager.inputDevices().map { manager.describe(it) } }
     val chosen = remember(deviceEpoch, choice) { manager.choose(choice) }
-    val isHeadset = chosen != null && manager.isExternal(chosen)
-    var gain by remember(isHeadset) { mutableFloatStateOf(settings.gainFor(isHeadset)) }
+    val gainKey = remember(deviceEpoch, choice) { manager.inputKey(chosen) }
+    var gain by remember(gainKey) { mutableFloatStateOf(settings.gainFor(gainKey)) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -130,9 +130,10 @@ fun CalibrationScreen(
             SettingChips(
                 title = "Selection",
                 options = listOf(
-                    InputChoice.AUTO.name to "Auto (prefer headset)",
+                    InputChoice.AUTO.name to "Auto",
                     InputChoice.BUILTIN.name to "Built-in mic",
-                    InputChoice.WIRED_HEADSET.name to "Wired TRRS",
+                    InputChoice.WIRED_HEADSET.name to "3.5 mm",
+                    InputChoice.USB.name to "USB",
                 ),
                 selected = choice.name,
                 onSelect = {
@@ -142,9 +143,14 @@ fun CalibrationScreen(
                 },
             )
             KeyValueRow(
-                "TRRS headset",
+                "3.5 mm headset",
                 if (manager.isWiredHeadsetConnected()) "detected" else "not detected",
                 if (manager.isWiredHeadsetConnected()) ForestGreen else ForestMuted,
+            )
+            KeyValueRow(
+                "USB microphone",
+                if (manager.usbMic() != null) "detected" else "not detected",
+                if (manager.usbMic() != null) ForestGreen else ForestMuted,
             )
             KeyValueRow("Chosen device", chosen?.let { manager.describe(it).name } ?: "platform default")
             KeyValueRow("Raw UNPROCESSED advertised", if (manager.unprocessedSupported()) "yes" else "no / unknown")
@@ -242,7 +248,8 @@ fun CalibrationScreen(
                 "Raw probe levels above do not include gain; the estimate below does.",
         ) {
             Text(
-                if (isHeadset) "Wired/USB external input" else "Built-in microphone",
+                chosen?.let { "${manager.describe(it).name} · ${manager.describe(it).typeLabel}" }
+                    ?: "Platform default input",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -253,7 +260,7 @@ fun CalibrationScreen(
                 valueLabel = String.format(Locale.US, "%.2fx", gain),
                 onChange = {
                     gain = it
-                    settings.setGain(isHeadset, it)
+                    settings.setGain(gainKey, it)
                 },
             )
             val adjustedRms = levels?.let { it.rmsDbfs + 20.0 * log10(gain.toDouble()) }
@@ -268,7 +275,7 @@ fun CalibrationScreen(
                 )
             }
             OutlinedButton(
-                onClick = { settings.setGain(isHeadset, 1.0f); gain = 1.0f },
+                onClick = { settings.setGain(gainKey, 1.0f); gain = 1.0f },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Reset gain to 1.0x") }
             Spacer(Modifier.height(2.dp))

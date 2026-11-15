@@ -42,9 +42,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.forestear.node.device.DeviceProfileStore
+import org.forestear.node.device.OemProfile
+import org.forestear.node.service.NodeService
 import org.forestear.node.service.NodeStatus
 import org.forestear.node.service.ProtectionAction
 import org.forestear.node.service.ProtectionChecker
+import org.forestear.node.service.ProtectionItem
+import org.forestear.node.service.ProtectionReport
 import org.forestear.node.settings.SettingsStore
 import org.forestear.node.ui.ForestAmber
 import org.forestear.node.ui.ForestGreen
@@ -55,12 +60,20 @@ import org.forestear.node.ui.KeyValueRow
 import org.forestear.node.ui.PermissionGroups
 import org.forestear.node.ui.PermissionSnapshot
 import org.forestear.node.ui.SectionCard
+import org.forestear.node.ui.SettingSlider
 import org.forestear.node.ui.SettingTextField
 import org.forestear.node.ui.StatusPill
+import org.json.JSONObject
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-private const val STEPS = 6
+private const val STEPS = 7
 
+/**
+ * First-run wizard. Works on any Android 8+ handset: the OEM steps come from the
+ * JSON profile table, OS-verifiable checks are marked "verified" and everything
+ * else is shown as user-confirmed, never assumed.
+ */
 @Composable
 fun SetupScreen(
     status: NodeStatus,
@@ -71,6 +84,8 @@ fun SetupScreen(
     val context = LocalContext.current
     val settings = remember { SettingsStore.get(context) }
     val checker = remember { ProtectionChecker(context, settings) }
+    val profile = remember { checker.profile() }
+    val device = remember { DeviceProfileStore(context).current() }
     var step by rememberSaveable { mutableIntStateOf(0) }
     var protection by remember { mutableStateOf(checker.check()) }
     var backendResult by remember { mutableStateOf<String?>(null) }
@@ -102,11 +117,12 @@ fun SetupScreen(
         }
 
         when (step) {
-            0 -> WelcomeStep()
+            0 -> WelcomeStep(device.headline())
             1 -> PermissionsStep(permissions, onRequest)
-            2 -> BatteryStep(protection, checker) { protection = checker.check() }
-            3 -> OemStep(protection, settings, checker) { protection = checker.check() }
-            4 -> BackendStep(
+            2 -> BatteryStep(protection, profile, checker) { protection = checker.check() }
+            3 -> OemStep(protection, settings, profile, checker) { protection = checker.check() }
+            4 -> ContinuityStep(status, settings)
+            5 -> BackendStep(
                 settings = settings,
                 result = backendResult,
                 ok = backendOk,
@@ -122,7 +138,7 @@ fun SetupScreen(
                     }
                 },
             )
-            else -> FinishStep(status, permissions, protection)
+            else -> FinishStep(status, permissions, protection, profile)
         }
 
         if (step == STEPS - 1) {
@@ -138,7 +154,10 @@ fun SetupScreen(
                 ) { Text("Grant microphone permission") }
             }
             Button(
-                onClick = { onDone(true) },
+                onClick = {
+                    settings.wizardCompleted = true
+                    onDone(true)
+                },
                 enabled = permissions.mic,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
@@ -147,7 +166,10 @@ fun SetupScreen(
                 ),
             ) { Text(if (status.running) "Finish (already monitoring)" else "Finish and start monitoring") }
             OutlinedButton(
-                onClick = { onDone(false) },
+                onClick = {
+                    settings.wizardCompleted = true
+                    onDone(false)
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Finish without starting") }
         }
@@ -180,7 +202,7 @@ private fun StepDots(step: Int) {
 }
 
 @Composable
-private fun WelcomeStep() {
+private fun WelcomeStep(deviceHeadline: String) {
     SectionCard(title = "What this app does") {
         Text(
             "ForestEar Node turns this phone into an acoustic sensor. Nine models run " +
@@ -193,14 +215,15 @@ private fun WelcomeStep() {
         KeyValueRow("Audio sent by default", "none")
         KeyValueRow("Speech", "never stored or uploaded")
         KeyValueRow("Alert clip", "not recorded on Android")
+        KeyValueRow("This handset", deviceHeadline)
     }
     SectionCard(title = "Honest expectations") {
         Text(
             "The Python reference pipeline measured 5.56 ms per hop on the development " +
                 "laptop (CPU, batch 1). On-phone latency is unmeasured until you run " +
                 "Diagnostics → Benchmark on this handset, so treat those numbers as " +
-                "reference only. Detection quality on this microphone is also unmeasured " +
-                "until you collect local audio and retrain.",
+                "reference only. The app chooses a performance tier from that measurement " +
+                "and can drop the most expensive models if the phone cannot keep up.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -279,18 +302,19 @@ private fun PermissionRow(
 
 @Composable
 private fun BatteryStep(
-    protection: org.forestear.node.service.ProtectionReport,
+    protection: ProtectionReport,
+    profile: OemProfile,
     checker: ProtectionChecker,
     refresh: () -> Unit,
 ) {
     val exempt = protection.items.firstOrNull { it.id == "battery_exemption" }?.ok == true
     SectionCard(
         title = "Battery optimisation exemption",
-        subtitle = "OxygenOS aggressively freezes background apps; without this the node dies.",
+        subtitle = "${profile.displayName} may freeze background apps; without this the node can die.",
     ) {
         KeyValueRow(
             "Status",
-            if (exempt) "exempt" else "not exempt",
+            if (exempt) "exempt (verified by the OS)" else "not exempt",
             if (exempt) ForestGreen else ForestRed,
         )
         if (!exempt) {
@@ -306,15 +330,16 @@ private fun BatteryStep(
             }
         }
         Text(
-            "The system dialog must be accepted. The app verifies this with " +
-                "isIgnoringBatteryOptimizations, so it cannot claim success falsely.",
+            "The app verifies this with isIgnoringBatteryOptimizations, so it cannot claim " +
+                "success falsely. If the OEM dialog does not appear, the app falls back to " +
+                "the standard Android battery-optimisation screen.",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     InfoBanner(
-        "Use a charger for 24 h soak tests. On battery, expect roughly a day of runtime " +
-            "with the thermal governor active; measure it with Tools → Soak test.",
+        "Use a charger for 24 h soak tests. On battery, runtime depends on the pack, the " +
+            "performance tier and the thermal governor; measure it with Tools → Soak test.",
         ForestAmber,
         "Power",
     )
@@ -322,79 +347,197 @@ private fun BatteryStep(
 
 @Composable
 private fun OemStep(
-    protection: org.forestear.node.service.ProtectionReport,
+    protection: ProtectionReport,
     settings: SettingsStore,
+    profile: OemProfile,
     checker: ProtectionChecker,
     refresh: () -> Unit,
 ) {
     SectionCard(
-        title = "OxygenOS / ColorOS protections",
-        subtitle = "These switches have no public API; the app asks you to confirm them.",
+        title = "${profile.displayName} background protections",
+        subtitle = "OS-verifiable switches are marked verified. Everything else has no public " +
+            "API, so the app shows the maker's steps and records only your confirmation.",
     ) {
-        val bg = protection.items.firstOrNull { it.id == "background_activity" }?.ok == true
-        val auto = protection.items.firstOrNull { it.id == "auto_launch" }?.ok == true
-        val recents = protection.items.firstOrNull { it.id == "recents_lock" }?.ok == true
-
-        OemRow(
-            "Allow background activity",
-            bg,
-            "Open app details → Battery → Allow background activity",
-            onOpen = { checker.open(ProtectionAction.APP_DETAILS) },
-            onConfirm = {
-                settings.backgroundActivityConfirmed = true
-                refresh()
-            },
+        val checks = listOf(
+            OemCheck("battery", "battery_exemption", "Battery optimisation exemption", false, true),
+            OemCheck("background_activity", "background_activity", "Allow background activity", false, false),
+            OemCheck("autostart", "auto_launch", "Auto-launch", false, false),
+            OemCheck("recents", "recents_lock", "Lock in recents", false, false),
+            OemCheck("overlay", "overlay", "Display over other apps", true, true),
+            OemCheck("charge_limit", "charge_limit", "Charge limit / battery care", true, false),
+            OemCheck("battery_health", "battery_health", "Battery swelling check", true, false),
         )
-        OemRow(
-            "Auto-launch",
-            auto,
-            "Enable ForestEar Node in the OEM auto-launch list",
-            onOpen = { checker.open(ProtectionAction.AUTO_LAUNCH) },
-            onConfirm = {
-                settings.autoLaunchConfirmed = true
-                refresh()
-            },
-        )
-        OemRow(
-            "Lock in recents",
-            recents,
-            "Open Recents, long-press ForestEar Node, tap the lock icon",
-            onOpen = { checker.open(ProtectionAction.RECENTS) },
-            onConfirm = {
-                settings.recentsLockedConfirmed = true
-                refresh()
-            },
+        for (check in checks) {
+            val item = protection.items.firstOrNull { it.id == check.itemId }
+            if (item == null && profile.stepsFor(check.step).isEmpty()) continue
+            OemRow(
+                title = check.title,
+                item = item,
+                steps = profile.stepsFor(check.step),
+                optional = check.optional || item?.optional == true,
+                verifiedByOs = check.verifiedByOs,
+                onOpen = { checker.openStep(check.step) },
+                onConfirm = {
+                    when (check.step) {
+                        "background_activity" -> settings.backgroundActivityConfirmed = true
+                        "autostart" -> settings.autoLaunchConfirmed = true
+                        "recents" -> settings.recentsLockedConfirmed = true
+                        "overlay" -> settings.overlayConfirmed = true
+                        "charge_limit" -> settings.chargeLimitConfirmed = true
+                        "battery_health" -> settings.batteryHealthInspected = true
+                    }
+                    refresh()
+                },
+            )
+        }
+        if (profile.notes.isNotBlank()) {
+            Text(
+                profile.notes,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "Maker-specific guidance: ${profile.dontkillmyappUrl}",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     InfoBanner(
-        "The app shows a permanent warning on the Status tab while any of these checks is " +
-            "missing. It never pretends they are enabled.",
+        "The Status tab keeps showing a warning while a required protection is missing. " +
+            "The app never pretends an unverifiable switch is enabled.",
         ForestAmber,
     )
 }
 
+private data class OemCheck(
+    val step: String,
+    val itemId: String,
+    val title: String,
+    val optional: Boolean,
+    val verifiedByOs: Boolean,
+)
+
 @Composable
 private fun OemRow(
     title: String,
-    confirmed: Boolean,
-    detail: String,
+    item: ProtectionItem?,
+    steps: List<String>,
+    optional: Boolean,
+    verifiedByOs: Boolean,
     onOpen: () -> Unit,
     onConfirm: () -> Unit,
 ) {
+    val ok = item?.ok == true
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, modifier = Modifier.weight(1f), fontSize = 14.sp)
-            StatusPill(if (confirmed) "CONFIRMED" else "MISSING", if (confirmed) ForestGreen else ForestAmber)
+            Text(title + if (optional) " (optional)" else "", modifier = Modifier.weight(1f), fontSize = 14.sp)
+            StatusPill(
+                when {
+                    ok && verifiedByOs -> "VERIFIED"
+                    ok -> "CONFIRMED"
+                    optional -> "OPTIONAL"
+                    else -> "MISSING"
+                },
+                if (ok) ForestGreen else if (optional) ForestMuted else ForestAmber,
+            )
         }
-        Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (!confirmed) {
+        if (steps.isNotEmpty()) {
+            for (line in steps) {
+                Text("• $line", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            item?.detail?.let {
+                Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (!ok) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onOpen) { Text("Open settings", fontSize = 12.sp) }
-                Button(onClick = onConfirm) { Text("I did it", fontSize = 12.sp) }
+                if (!verifiedByOs) {
+                    Button(onClick = onConfirm) { Text("I did it", fontSize = 12.sp) }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun ContinuityStep(status: NodeStatus, settings: SettingsStore) {
+    val context = LocalContext.current
+    var minutes by remember { mutableIntStateOf(settings.continuityMinutes) }
+    val result = remember(status.continuity, minutes) { parseContinuity(status.continuity) }
+    SectionCard(
+        title = "Screen-off continuity self-test",
+        subtitle = "The most common failure is the maker freezing the app after the screen " +
+            "turns off. This counts analysed audio windows while you leave the phone alone.",
+    ) {
+        SettingSlider(
+            "Test length",
+            minutes.toFloat(),
+            1f..60f,
+            "$minutes min",
+            {
+                minutes = it.toInt()
+                settings.continuityMinutes = minutes
+            },
+            "Keep monitoring running; screen state cannot be forced by an app.",
+        )
+        if (!status.running) {
+            InfoBanner(
+                "Start monitoring on the Status tab before running the continuity test.",
+                ForestAmber,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    NodeService.action(
+                        context,
+                        NodeService.ACTION_CONTINUITY_START,
+                    )
+                },
+                enabled = status.running,
+            ) { Text("Start test", fontSize = 12.sp) }
+            OutlinedButton(
+                onClick = {
+                    NodeService.action(
+                        context,
+                        NodeService.ACTION_CONTINUITY_STOP,
+                    )
+                },
+                enabled = status.running,
+            ) { Text("Stop and finish", fontSize = 12.sp) }
+        }
+        Text(
+            "Turn the screen off and leave the phone still for $minutes min, then stop the test.",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (result != null) {
+            val pass = result.first == "PASS"
+            KeyValueRow(
+                "Last result",
+                result.first,
+                if (pass) ForestGreen else ForestRed,
+            )
+            KeyValueRow("Coverage", result.second)
+        } else {
+            Text("No continuity result recorded yet.", fontSize = 12.sp, color = ForestMuted)
+        }
+    }
+}
+
+/** Returns (outcome, "coverage, gaps") or null. */
+private fun parseContinuity(json: String): Pair<String, String>? = runCatching {
+    if (json.isBlank()) return null
+    val o = JSONObject(json)
+    val outcome = o.optString("outcome", "")
+    if (outcome.isBlank()) return null
+    val coverage = o.optDouble("coverage", 0.0)
+    val gaps = o.optInt("gap_events", 0)
+    outcome to "%.0f%%, %d gap event(s)".format(Locale.US, coverage * 100, gaps)
+}.getOrNull()
 
 @Composable
 private fun BackendStep(
@@ -407,7 +550,8 @@ private fun BackendStep(
     SectionCard(
         title = "Backend",
         subtitle = "The phone posts JSON alerts to this URL. Use the laptop's LAN address " +
-            "when the phone is on Wi-Fi; 127.0.0.1 only works with adb reverse.",
+            "when the phone is on Wi-Fi; 127.0.0.1 only works with adb reverse. A Wi-Fi-only " +
+            "tablet works the same way.",
     ) {
         SettingTextField("Node ID", settings.nodeId, { settings.nodeId = it })
         SettingTextField(
@@ -435,8 +579,8 @@ private fun BackendStep(
         }
     }
     InfoBanner(
-        "Recommended: a 4G-only SIM with a small data plan. The node sends a few KB per " +
-            "heartbeat and nothing else unless streaming is enabled.",
+        "Recommended: a 4G-only SIM with a small data plan, or Wi-Fi. The node sends a few " +
+            "KB per heartbeat and nothing else unless streaming is enabled.",
         ForestGreen,
         "Connectivity",
     )
@@ -446,17 +590,28 @@ private fun BackendStep(
 private fun FinishStep(
     status: NodeStatus,
     permissions: PermissionSnapshot,
-    protection: org.forestear.node.service.ProtectionReport,
+    protection: ProtectionReport,
+    profile: OemProfile,
 ) {
-    SectionCard(title = "Checklist") {
-        CheckRow("Microphone permission", permissions.mic)
-        CheckRow("Notification permission", permissions.notifications)
-        CheckRow("Battery exemption", protection.items.firstOrNull { it.id == "battery_exemption" }?.ok == true)
-        CheckRow("Background activity confirmed", protection.items.firstOrNull { it.id == "background_activity" }?.ok == true)
-        CheckRow("Auto-launch confirmed", protection.items.firstOrNull { it.id == "auto_launch" }?.ok == true)
-        CheckRow("Recents lock confirmed", protection.items.firstOrNull { it.id == "recents_lock" }?.ok == true)
-        CheckRow("Service currently running", status.running)
+    SectionCard(title = "Checklist", subtitle = "Verified items are read from the OS; the " +
+        "rest are what you confirmed in this wizard.") {
+        CheckRow("Microphone permission", permissions.mic, verified = true)
+        CheckRow("Notification permission", permissions.notifications, verified = true)
+        CheckRow("Battery exemption", ok(protection, "battery_exemption"), verified = true)
+        CheckRow("Background activity", ok(protection, "background_activity"), verified = false)
+        CheckRow("Auto-launch", ok(protection, "auto_launch"), verified = false)
+        CheckRow("Recents lock", ok(protection, "recents_lock"), verified = false)
+        CheckRow("Overlay permission (optional)", ok(protection, "overlay"), verified = true, optional = true)
+        CheckRow("Charge limit set (optional)", ok(protection, "charge_limit"), verified = false, optional = true)
+        CheckRow("Battery swelling checked (optional)", ok(protection, "battery_health"), verified = false, optional = true)
+        CheckRow("Service currently running", status.running, verified = true)
     }
+    InfoBanner(
+        "${profile.displayName}: run Diagnostics → Benchmark once so the app can pick a " +
+            "performance tier for this handset. Until then it starts conservatively at tier C.",
+        ForestAmber,
+        "Next step",
+    )
     Text(
         "You can change every value later in Settings. The Status tab keeps showing a " +
             "warning while a required protection is missing.",
@@ -465,11 +620,27 @@ private fun FinishStep(
     )
 }
 
+private fun ok(protection: ProtectionReport, id: String): Boolean =
+    protection.items.firstOrNull { it.id == id }?.ok == true
+
 @Composable
-private fun CheckRow(label: String, ok: Boolean) {
+private fun CheckRow(
+    label: String,
+    ok: Boolean,
+    verified: Boolean,
+    optional: Boolean = false,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), fontSize = 13.sp)
-        StatusPill(if (ok) "OK" else "MISSING", if (ok) ForestGreen else ForestAmber)
+        StatusPill(
+            when {
+                ok && verified -> "VERIFIED"
+                ok -> "CONFIRMED"
+                optional -> "OPTIONAL"
+                else -> "MISSING"
+            },
+            if (ok) ForestGreen else if (optional) ForestMuted else ForestAmber,
+        )
     }
 }
 

@@ -47,6 +47,7 @@ import org.forestear.node.ui.ForestRed
 import org.forestear.node.ui.InfoBanner
 import org.forestear.node.ui.KeyValueRow
 import org.forestear.node.ui.SectionCard
+import org.forestear.node.ui.SettingSlider
 import org.forestear.node.ui.SettingSwitch
 import org.forestear.node.ui.SettingTextField
 import org.forestear.node.ui.StatusPill
@@ -72,6 +73,9 @@ fun ToolsScreen(
     var protection by remember { mutableStateOf(checker.check()) }
     var collectionEnabled by remember { mutableStateOf(settings.collectionEnabled) }
     var streamingEnabled by remember { mutableStateOf(settings.streamingEnabled) }
+    var mockCaps by remember { mutableStateOf(settings.mockCapabilities) }
+    var overlayHelped by remember { mutableStateOf(settings.overlayHelped) }
+    var continuityMinutes by remember { mutableIntStateOf(settings.continuityMinutes) }
     var tick by remember { mutableIntStateOf(0) }
     var notice by remember { mutableStateOf<String?>(null) }
 
@@ -364,11 +368,134 @@ fun ToolsScreen(
                 }
             }
             Text(
-                "OxygenOS has no public API for auto-launch or background-activity switches. " +
-                    "The app records only what you confirm in Setup and never claims more.",
+                "Most makers have no public API for auto-launch or background-activity " +
+                    "switches. The app records only what you confirm in Setup and never claims more.",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        SectionCard(
+            title = "Screen-off continuity test",
+            subtitle = "Counts analysed audio windows and gap events while the screen is off. " +
+                "A pass needs >=90% coverage and zero gaps.",
+        ) {
+            SettingSlider(
+                "Test length",
+                continuityMinutes.toFloat(),
+                1f..60f,
+                "$continuityMinutes min",
+                {
+                    continuityMinutes = it.toInt()
+                    settings.continuityMinutes = continuityMinutes
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        if (!status.running) {
+                            notice = "Start monitoring first: the test counts windows in the service."
+                        } else {
+                            NodeService.action(context, NodeService.ACTION_CONTINUITY_START)
+                            notice = "Continuity test started. Turn the screen off."
+                        }
+                    },
+                    enabled = status.running,
+                ) { Text("Start", fontSize = 12.sp) }
+                OutlinedButton(
+                    onClick = {
+                        NodeService.action(context, NodeService.ACTION_CONTINUITY_STOP)
+                        notice = "Continuity test stopped; result written."
+                    },
+                    enabled = status.running,
+                ) { Text("Stop and finish", fontSize = 12.sp) }
+            }
+            val result = runCatching {
+                if (status.continuity.isBlank()) null else org.json.JSONObject(status.continuity)
+            }.getOrNull()
+            if (result == null) {
+                Text("No continuity result recorded yet.", fontSize = 12.sp, color = ForestMuted)
+            } else {
+                KeyValueRow(
+                    "Outcome",
+                    result.optString("outcome", "unknown"),
+                    if (result.optString("outcome") == "PASS") ForestGreen else ForestRed,
+                )
+                KeyValueRow(
+                    "Coverage",
+                    "%.0f%% over %d s (%d gap events)".format(
+                        Locale.US,
+                        result.optDouble("coverage", 0.0) * 100,
+                        result.optLong("elapsed_s", 0),
+                        result.optInt("gap_events", 0),
+                    ),
+                )
+            }
+        }
+
+        SectionCard(
+            title = "Overlay permission test (optional)",
+            subtitle = "Some makers keep a service alive when it can draw over other apps; others " +
+                "ignore it. The app cannot verify that it helps, so record your own result.",
+        ) {
+            val overlay = protection.items.firstOrNull { it.id == "overlay" }?.ok == true
+            KeyValueRow(
+                "Permission",
+                if (overlay) "granted (verified by the OS)" else "not granted",
+                if (overlay) ForestGreen else ForestAmber,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        checker.open(ProtectionAction.OVERLAY)
+                        protection = checker.check()
+                    },
+                ) { Text("Open overlay settings", fontSize = 12.sp) }
+                OutlinedButton(onClick = { protection = checker.check() }) {
+                    Text("Re-check", fontSize = 12.sp)
+                }
+            }
+            SettingSwitch(
+                "Overlay seemed to help on this phone",
+                overlayHelped,
+                {
+                    overlayHelped = it
+                    settings.overlayHelped = it
+                    settings.overlayConfirmed = true
+                },
+                "Your observation only; it is not used as a verified protection.",
+            )
+        }
+
+        SectionCard(
+            title = "Debug: mock capabilities",
+            subtitle = "Replaces the real capability probe with a deterministic profile that lacks " +
+                "telephony, external audio, fused location and the thermal API. Use it to check " +
+                "that missing capabilities never crash the app.",
+        ) {
+            SettingSwitch(
+                "Use mock capability profile",
+                mockCaps,
+                {
+                    mockCaps = it
+                    settings.mockCapabilities = it
+                    if (status.running) {
+                        NodeService.action(context, NodeService.ACTION_REPROBE)
+                    }
+                    notice = if (it) {
+                        "Mock capabilities on; the next probe reports missing capabilities."
+                    } else {
+                        "Mock capabilities off; re-probe to read the real device."
+                    }
+                },
+                "Debug only. The Status tab shows whatever the mock profile reports.",
+            )
+            OutlinedButton(
+                onClick = {
+                    NodeService.action(context, NodeService.ACTION_REPROBE)
+                    notice = "Re-probe requested."
+                },
+            ) { Text("Re-probe device", fontSize = 12.sp) }
         }
 
         SectionCard(

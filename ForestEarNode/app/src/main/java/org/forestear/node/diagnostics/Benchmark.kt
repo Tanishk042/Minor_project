@@ -4,9 +4,12 @@ import android.content.Context
 import android.os.Debug
 import android.os.Process
 import org.forestear.node.config.AppConfig
+import org.forestear.node.device.DeviceProfileStore
+import org.forestear.node.device.TierSelector
 import org.forestear.node.features.FeatureAssets
 import org.forestear.node.model.DelegateKind
 import org.forestear.node.model.FusionTrees
+import org.forestear.node.model.ModelZoo
 import org.forestear.node.model.TfliteModel
 import org.forestear.node.model.YamnetModel
 import org.forestear.node.settings.SettingsStore
@@ -37,6 +40,8 @@ data class BenchmarkReport(
     val ramMb: Double,
     val chosenDelegates: Map<String, String>,
     val note: String = "",
+    val tier: String = "",
+    val tierReason: String = "",
 )
 
 /**
@@ -57,6 +62,7 @@ class Benchmark(
         val wallStart = System.nanoTime()
         val results = mutableListOf<ModelBenchmark>()
         val chosen = mutableMapOf<String, String>()
+        val gpuStable = mutableSetOf<String>()
 
         val specs = listOf(
             "m1" to 15600,
@@ -77,6 +83,9 @@ class Benchmark(
             if (gpu.ok && (!cpu.ok || gpu.meanMs < cpu.meanMs * 0.95)) {
                 best = gpu
                 bestKind = DelegateKind.GPU
+                // "Stable" means no p95 spike larger than 2x the mean; a GPU
+                // that is fast on average but periodically stalls is not used.
+                if (gpu.p95Ms <= gpu.meanMs * 2.0) gpuStable += id
             }
             chosen[id] = bestKind.name
             results += best.copy(
@@ -137,15 +146,36 @@ class Benchmark(
         val cpuPct = if (wallMs > 0) (cpuMs / wallMs * 100.0) else 0.0
         val ramMb = currentRamMb()
 
+        val totalMean = if (totalOk) total else results.sumOf { it.meanMs }
+        val profile = runCatching { DeviceProfileStore(context).current() }.getOrNull()
+        val plan = if (profile != null) {
+            TierSelector.select(
+                measuredPipelineMs = totalMean,
+                budgetMs = settings.analysisBudgetMs.toDouble(),
+                availableModels = ModelZoo.ALL_MODELS,
+                gpuModels = gpuStable,
+                cores = profile.build.cores,
+                ramTotalMb = profile.build.ramTotalMb,
+                manualTier = settings.tierOverride,
+            )
+        } else null
+        if (plan != null && profile != null) {
+            settings.setTierPlan(plan, profile.profileKey())
+        }
+        settings.gpuStableModels = gpuStable
+        settings.lastBenchmarkTotalMs = totalMean
+
         val report = BenchmarkReport(
             generatedUtc = TimeUtils.isoUtc(),
             perModel = results,
-            totalMeanMs = if (totalOk) total else results.sumOf { it.meanMs },
+            totalMeanMs = totalMean,
             cpuPct = cpuPct,
             ramMb = ramMb,
             chosenDelegates = chosen,
-            note = "GPU used only when it was both available and >5% faster; " +
+            note = "GPU used only when it was both available and >5% faster and stable; " +
                 "numbers are on-device and will vary with thermal state.",
+            tier = plan?.tier?.name ?: "unset",
+            tierReason = plan?.reason ?: "device profile unavailable",
         )
         settings.bestDelegates = JSONObject(chosen as Map<*, *>).toString()
         write(report)
@@ -221,6 +251,8 @@ class Benchmark(
             .put("cpu_pct", report.cpuPct)
             .put("ram_mb", report.ramMb)
             .put("note", report.note)
+            .put("tier", report.tier)
+            .put("tier_reason", report.tierReason)
             .put("chosen_delegates", JSONObject(report.chosenDelegates as Map<*, *>))
         val arr = JSONArray()
         report.perModel.forEach { m ->

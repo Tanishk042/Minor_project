@@ -2,7 +2,9 @@ package org.forestear.node.audio
 
 import android.content.Context
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioRecordingConfiguration
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
@@ -12,6 +14,7 @@ import android.os.Process
 import org.forestear.node.settings.SettingsStore
 import org.forestear.node.util.FLog
 import java.io.Closeable
+import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.log10
@@ -27,9 +30,13 @@ data class EffectStatus(
     val nsDisabled: Boolean,
     val aecDisabled: Boolean,
     val audioSource: String,
+    val captureRate: Int = 16000,
+    val resampled: Boolean = false,
 ) {
     fun summary(): String = buildString {
         append("source=").append(audioSource)
+        append(" rate=").append(captureRate)
+        if (resampled) append("->16000")
         append(" agc=").append(if (agcAvailable) (if (agcDisabled) "off" else "ON") else "n/a")
         append(" ns=").append(if (nsAvailable) (if (nsDisabled) "off" else "ON") else "n/a")
         append(" aec=").append(if (aecAvailable) (if (aecDisabled) "off" else "ON") else "n/a")
@@ -39,16 +46,14 @@ data class EffectStatus(
 /**
  * 16 kHz mono PCM capture with a 1.0 s sliding window and 0.5 s hop.
  *
- * Design notes for the Nord CE 2 Lite:
- *  - UNPROCESSED is preferred when the platform advertises it; otherwise MIC.
- *  - AGC / noise suppression / echo cancellation are explicitly disabled and
- *    their availability is logged, because they change the spectral envelope
- *    the models were trained on.
- *  - The capture thread owns the AudioRecord. All callbacks run on that thread;
- *    the service hands heavy inference to its own executor.
- *  - read errors surface through [Listener.onError]; the service restarts the
- *    capture with backoff (OxygenOS can revoke the mic path when the app is
- *    moved to the background without the right protections).
+ * Device-agnostic behaviour:
+ *  - requests 16 kHz; if the phone refuses it, negotiates the nearest supported
+ *    rate and resamples to 16 kHz (linear interpolation, see [StreamingResampler]);
+ *  - prefers UNPROCESSED and falls back to MIC per rate, not globally;
+ *  - disables AGC/NS/AEC where they can be created and logs what is actually on;
+ *  - registers `AudioRecordingCallback` on API 29+ to notice route changes;
+ *  - restarts capture on read errors, a 10 s all-zero signal, or a stalled read;
+ *  - reports the gap length so the service can log it and mark the node degraded.
  */
 class AudioCapture(
     context: Context,
@@ -63,21 +68,34 @@ class AudioCapture(
         fun onRawChunk(pcm: ShortArray, timestampMs: Long)
         fun onState(state: State, detail: String)
         fun onError(message: String, fatal: Boolean)
+
+        /** Audio was not delivered for [gapMs]; the service logs the hole. */
+        fun onGap(gapMs: Long, reason: String) {}
+
+        /** The input produced digital silence for [durationMs]. */
+        fun onZeroSignal(durationMs: Long) {}
+
+        /** The routed input changed (headset plugged, USB attached, etc.). */
+        fun onRouteChanged(input: String) {}
     }
 
     enum class State { IDLE, STARTING, RUNNING, STOPPING, ERROR }
 
     private val appContext = context.applicationContext
     private val devices = AudioDeviceManager(appContext)
-    private val sampleRate = 16000
+    private val audioManager =
+        appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+    private val targetRate = 16000
     private val windowSamples = 16000
     private val hopSamples = 8000
-    private val blockSamples = 1600 // 100 ms
 
     private val running = AtomicBoolean(false)
     private var record: AudioRecord? = null
     private var thread: Thread? = null
     private var effects: List<Any> = emptyList()
+    private var recordingCallback: AudioManager.AudioRecordingCallback? = null
+    private val callbackExecutor = Executor { command -> command.run() }
 
     @Volatile private var activeInputName: String = "none"
     @Volatile private var effectStatus: EffectStatus? = null
@@ -85,10 +103,14 @@ class AudioCapture(
     @Volatile private var lastRmsDb: Double = -100.0
     @Volatile private var lastPeakDb: Double = -100.0
     @Volatile private var lastClipRatio: Double = 0.0
+    @Volatile private var captureRate: Int = 16000
+    @Volatile private var resampled: Boolean = false
 
     fun activeInput(): String = activeInputName
     fun lastEffects(): EffectStatus? = effectStatus
     fun lastLevels(): Triple<Double, Double, Double> = Triple(lastRmsDb, lastPeakDb, lastClipRatio)
+    fun captureSampleRate(): Int = captureRate
+    fun isResampling(): Boolean = resampled
 
     /** Applied to subsequent samples; used by the calibration screen. */
     fun setGain(value: Float) {
@@ -98,8 +120,7 @@ class AudioCapture(
     fun start() {
         if (!running.compareAndSet(false, true)) return
         val chosen = devices.choose(settings.inputChoice)
-        val external = chosen != null && devices.isExternal(chosen)
-        gain = settings.gainFor(external)
+        gain = settings.gainFor(devices.inputKey(chosen))
         listener.onState(State.STARTING, "opening microphone")
         thread = Thread({ captureLoop() }, "forestear-audio").also {
             it.priority = Thread.MAX_PRIORITY
@@ -118,36 +139,40 @@ class AudioCapture(
 
     override fun close() = stop()
 
+    private data class Negotiated(
+        val record: AudioRecord,
+        val status: EffectStatus,
+        val device: android.media.AudioDeviceInfo?,
+    )
+
     private fun captureLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
-        var opened: Pair<AudioRecord, EffectStatus>? = null
-        var lastError: Throwable? = null
-        for (source in candidateSources()) {
-            try {
-                opened = open(source)
-                break
-            } catch (e: Throwable) {
-                lastError = e
-                FLog.w("audio source $source failed: ${e.message}")
-            }
-        }
-        val (rec, status) = opened ?: run {
+        val negotiated = negotiate()
+        if (negotiated == null) {
             running.set(false)
             listener.onState(State.ERROR, "cannot open microphone")
-            listener.onError("cannot open microphone: ${lastError?.message}", true)
+            listener.onError("cannot open microphone at any supported rate", true)
             return
         }
+        val rec = negotiated.record
         record = rec
-        effectStatus = status
-        FLog.i("audio capture: ${status.summary()}")
-        listener.onState(State.RUNNING, status.summary())
+        effectStatus = negotiated.status
+        captureRate = negotiated.status.captureRate
+        resampled = negotiated.status.resampled
+        FLog.i("audio capture: ${negotiated.status.summary()}")
+        listener.onState(State.RUNNING, negotiated.status.summary())
 
+        val resampler = StreamingResampler(captureRate, targetRate)
+        val blockSamples = max(160, captureRate / 10) // 100 ms
         val ring = FloatRing(windowSamples)
         val shortBuf = ShortArray(blockSamples)
         val startEpochMs = System.currentTimeMillis()
-        var totalSamples = 0L
+        var totalOut = 0L
         var sinceHop = 0
         var zeroReads = 0
+        var zeroRunSamples = 0L
+        var lastReadWallMs = startEpochMs
+        val zeroSignalLimit = captureRate.toLong() * 10L
 
         try {
             rec.startRecording()
@@ -156,6 +181,7 @@ class AudioCapture(
             }
             activeInputName = describeRouted(rec)
             FLog.i("active input: $activeInputName")
+            registerCallback(rec)
 
             while (running.get()) {
                 val n = rec.read(shortBuf, 0, shortBuf.size, AudioRecord.READ_BLOCKING)
@@ -172,24 +198,50 @@ class AudioCapture(
                 }
                 zeroReads = 0
 
-                val chunkTs = startEpochMs + totalSamples * 1000L / sampleRate
-                listener.onRawChunk(shortBuf.copyOf(n), chunkTs)
+                val nowWall = System.currentTimeMillis()
+                val gap = nowWall - lastReadWallMs
+                lastReadWallMs = nowWall
+                if (gap > max(2_000L, (hopSamples * 1000L / targetRate) * 4)) {
+                    listener.onGap(gap, "audio read stalled")
+                }
 
+                var nonZero = false
                 var clip = 0
                 for (i in 0 until n) {
                     val raw = shortBuf[i].toInt()
+                    if (abs(raw) > 1) nonZero = true
                     if (abs(raw) >= 32000) clip++
-                    ring.add((raw / 32768.0f) * gain)
                 }
-                totalSamples += n
-                sinceHop += n
+                if (nonZero) zeroRunSamples = 0 else zeroRunSamples += n
+                if (zeroRunSamples >= zeroSignalLimit) {
+                    listener.onZeroSignal(10_000)
+                    listener.onError("input produced 10 s of digital silence", true)
+                    break
+                }
+
+                val out = if (resampler.isIdentity) {
+                    FloatArray(n) { shortBuf[it] / 32768.0f }
+                } else {
+                    resampler.process(shortBuf, n)
+                }
+                if (out.isEmpty()) continue
+
+                val pcm = ShortArray(out.size) {
+                    (out[it] * 32767.0f).toInt().coerceIn(-32768, 32767).toShort()
+                }
+                val chunkTs = startEpochMs + totalOut * 1000L / targetRate
+                listener.onRawChunk(pcm, chunkTs)
+
+                for (v in out) ring.add(v * gain)
+                totalOut += out.size
+                sinceHop += out.size
                 lastClipRatio = clip.toDouble() / n
 
                 while (sinceHop >= hopSamples) {
                     sinceHop -= hopSamples
                     val window = ring.lastWindow()
-                    val windowStart = (totalSamples - windowSamples).coerceAtLeast(0L)
-                    val ts = startEpochMs + windowStart * 1000L / sampleRate
+                    val windowStart = (totalOut - windowSamples).coerceAtLeast(0L)
+                    val ts = startEpochMs + windowStart * 1000L / targetRate
                     var sumSq = 0.0
                     var peak = 0.0
                     var clipped = 0
@@ -214,11 +266,43 @@ class AudioCapture(
                 listener.onError("audio loop failed: ${e.message}", true)
             }
         } finally {
+            unregisterCallback(rec)
             runCatching { rec.stop() }
             release()
             running.set(false)
             listener.onState(State.IDLE, "capture stopped")
         }
+    }
+
+    /**
+     * Try the target rate first, then the native rate and every rate the chosen
+     * input advertises, then common rates. At each rate, UNPROCESSED is tried
+     * before MIC. A failure at one rate never poisons the next attempt.
+     */
+    private fun negotiate(): Negotiated? {
+        val chosen = devices.choose(settings.inputChoice)
+        val advertised = chosen?.sampleRates?.toList() ?: emptyList()
+        val native = runCatching {
+            audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
+        }.getOrNull()
+        val rates = StreamingResampler.candidateRates(
+            targetRate,
+            advertised + listOfNotNull(native),
+        )
+        var lastError: Throwable? = null
+        for (rate in rates) {
+            for (source in candidateSources()) {
+                try {
+                    val opened = open(source, rate, chosen)
+                    return Negotiated(opened.first, opened.second, chosen)
+                } catch (e: Throwable) {
+                    lastError = e
+                    FLog.w("audio open failed at ${rate}Hz source=$source: ${e.message}")
+                }
+            }
+        }
+        if (lastError != null) FLog.e("no working audio configuration", lastError)
+        return null
     }
 
     private fun candidateSources(): List<Int> {
@@ -228,16 +312,20 @@ class AudioCapture(
         return listOfNotNull(unprocessed, MediaRecorder.AudioSource.MIC).distinct()
     }
 
-    private fun open(source: Int): Pair<AudioRecord, EffectStatus> {
-        val device = devices.choose(settings.inputChoice)
+    private fun open(
+        source: Int,
+        rate: Int,
+        device: android.media.AudioDeviceInfo?,
+    ): Pair<AudioRecord, EffectStatus> {
         val minBuf = AudioRecord.getMinBufferSize(
-            sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+            rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
-        require(minBuf > 0) { "getMinBufferSize=$minBuf" }
+        require(minBuf > 0) { "getMinBufferSize=$minBuf at ${rate}Hz" }
+        val blockSamples = max(160, rate / 10)
         val bufferBytes = max(minBuf, blockSamples * 2 * 4)
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(sampleRate)
+            .setSampleRate(rate)
             .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
             .build()
         val rec = AudioRecord.Builder()
@@ -247,7 +335,7 @@ class AudioCapture(
             .build()
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
             rec.release()
-            throw IllegalStateException("AudioRecord not initialized (source=$source)")
+            throw IllegalStateException("AudioRecord not initialized (source=$source rate=$rate)")
         }
         if (device != null) {
             val ok = rec.setPreferredDevice(device)
@@ -291,8 +379,35 @@ class AudioCapture(
             nsDisabled = nsOff,
             aecDisabled = aecOff,
             audioSource = if (source == MediaRecorder.AudioSource.UNPROCESSED) "UNPROCESSED" else "MIC",
+            captureRate = rate,
+            resampled = rate != targetRate,
         )
         return rec to status
+    }
+
+    private fun registerCallback(rec: AudioRecord) {
+        if (Build.VERSION.SDK_INT < 29) return
+        // API 29's recording callback lives on AudioManager, not AudioRecord.
+        val callback = object : AudioManager.AudioRecordingCallback() {
+            override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
+                val routed = runCatching { rec.routedDevice }.getOrNull()
+                val name = routed?.let { devices.describe(it).name } ?: "default"
+                if (name != activeInputName) {
+                    FLog.i("input route changed: $activeInputName -> $name")
+                    activeInputName = name
+                    listener.onRouteChanged(name)
+                }
+            }
+        }
+        runCatching { rec.registerAudioRecordingCallback(callbackExecutor, callback) }
+            .onFailure { FLog.w("recording callback registration failed: ${it.message}") }
+        recordingCallback = callback
+    }
+
+    private fun unregisterCallback(rec: AudioRecord) {
+        val callback = recordingCallback ?: return
+        recordingCallback = null
+        runCatching { rec.unregisterAudioRecordingCallback(callback) }
     }
 
     private fun describeRouted(rec: AudioRecord): String {

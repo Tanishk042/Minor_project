@@ -4,7 +4,7 @@ import android.content.Context
 import org.forestear.node.config.AppConfig
 import org.json.JSONObject
 
-enum class InputChoice { AUTO, BUILTIN, WIRED_HEADSET }
+enum class InputChoice { AUTO, BUILTIN, WIRED_HEADSET, USB }
 
 /**
  * Small, dependency-free settings store (SharedPreferences).
@@ -50,6 +50,17 @@ class SettingsStore private constructor(context: Context) {
             .putString("streaming_url", config.android.streaming.defaultUrl)
             .putString("sms_numbers", "")
             .putInt("sms_subscription_id", -1)
+            .putString("tier_override", "AUTO")
+            .putString("tier_plan", "")
+            .putString("tier_profile_key", "")
+            .putBoolean("wizard_completed", false)
+            .putBoolean("charge_limit_confirmed", false)
+            .putBoolean("battery_health_inspected", false)
+            .putBoolean("overlay_confirmed", false)
+            .putBoolean("overlay_helped", false)
+            .putBoolean("mock_capabilities", false)
+            .putString("continuity_result", "")
+            .putInt("continuity_minutes", 5)
             .putBoolean("initialized", true)
             .apply()
     }
@@ -111,6 +122,17 @@ class SettingsStore private constructor(context: Context) {
     fun setGain(isHeadset: Boolean, gain: Float) {
         prefs.edit().putFloat(if (isHeadset) "gain_headset" else "gain_builtin",
             gain.coerceIn(0.25f, 8.0f)).apply()
+    }
+
+    /** Per-input gain key: builtin / headset / usb. */
+    fun gainFor(inputKey: String): Float =
+        prefs.getFloat("gain_${inputKey.replace(Regex("[^a-z0-9_]"), "_")}", 1.0f)
+            .coerceIn(0.25f, 8.0f)
+
+    fun setGain(inputKey: String, gain: Float) {
+        prefs.edit()
+            .putFloat("gain_${inputKey.replace(Regex("[^a-z0-9_]"), "_")}", gain.coerceIn(0.25f, 8.0f))
+            .apply()
     }
 
     var m8Duty: Int
@@ -242,7 +264,183 @@ class SettingsStore private constructor(context: Context) {
         runCatching { JSONObject(bestDelegates).optString(model, "CPU_XNNPACK") }
             .getOrDefault("CPU_XNNPACK")
 
+    /** Mean full-pipeline time from the last benchmark; NaN when never measured. */
+    var lastBenchmarkTotalMs: Double
+        get() = prefs.getFloat("benchmark_total_ms", Float.NaN).toDouble()
+        set(v) = prefs.edit()
+            .putFloat("benchmark_total_ms", if (v.isFinite()) v.toFloat() else Float.NaN)
+            .apply()
+
+    /** Models whose GPU delegate was both faster and stable on this handset. */
+    var gpuStableModels: Set<String>
+        get() = (prefs.getString("gpu_stable_models", "") ?: "")
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        set(v) = prefs.edit().putString("gpu_stable_models", v.joinToString(",")).apply()
+
+    var continuityMinutes: Int
+        get() = prefs.getInt("continuity_minutes", 5).coerceIn(1, 120)
+        set(v) = prefs.edit().putInt("continuity_minutes", v.coerceIn(1, 120)).apply()
+
+    // ---------------------------------------------------------------- tiers
+    var tierOverride: org.forestear.node.device.PerfTier?
+        get() = org.forestear.node.device.PerfTier.fromName(
+            prefs.getString("tier_override", "AUTO")
+        )
+        set(v) = prefs.edit().putString("tier_override", v?.name ?: "AUTO").apply()
+
+    var tierPlanJson: String
+        get() = prefs.getString("tier_plan", "") ?: ""
+        private set(v) = prefs.edit().putString("tier_plan", v).apply()
+
+    fun tierPlan(): org.forestear.node.device.TierPlan? = runCatching {
+        val text = tierPlanJson
+        if (text.isBlank()) null
+        else org.forestear.node.device.TierPlan.fromJson(JSONObject(text))
+    }.getOrNull()
+
+    fun setTierPlan(plan: org.forestear.node.device.TierPlan, profileKey: String) {
+        prefs.edit()
+            .putString("tier_plan", plan.toJson().toString())
+            .putString("tier_profile_key", profileKey)
+            .apply()
+    }
+
+    var tierProfileKey: String
+        get() = prefs.getString("tier_profile_key", "") ?: ""
+        private set(v) = prefs.edit().putString("tier_profile_key", v).apply()
+
+    /** True when the stored tier was chosen for a different app version/device. */
+    fun tierIsStale(currentProfileKey: String): Boolean =
+        tierPlan() == null || tierProfileKey != currentProfileKey
+
+    // ------------------------------------------------------------- wizard
+    var wizardCompleted: Boolean
+        get() = prefs.getBoolean("wizard_completed", false)
+        set(v) = prefs.edit().putBoolean("wizard_completed", v).apply()
+
+    var chargeLimitConfirmed: Boolean
+        get() = prefs.getBoolean("charge_limit_confirmed", false)
+        set(v) = prefs.edit().putBoolean("charge_limit_confirmed", v).apply()
+
+    var batteryHealthInspected: Boolean
+        get() = prefs.getBoolean("battery_health_inspected", false)
+        set(v) = prefs.edit().putBoolean("battery_health_inspected", v).apply()
+
+    var overlayConfirmed: Boolean
+        get() = prefs.getBoolean("overlay_confirmed", false)
+        set(v) = prefs.edit().putBoolean("overlay_confirmed", v).apply()
+
+    var overlayHelped: Boolean
+        get() = prefs.getBoolean("overlay_helped", false)
+        set(v) = prefs.edit().putBoolean("overlay_helped", v).apply()
+
+    var mockCapabilities: Boolean
+        get() = prefs.getBoolean("mock_capabilities", false)
+        set(v) = prefs.edit().putBoolean("mock_capabilities", v).apply()
+
+    var continuityResultJson: String
+        get() = prefs.getString("continuity_result", "") ?: ""
+        set(v) = prefs.edit().putString("continuity_result", v).apply()
+
+    // ------------------------------------------------------- export/import
+    /**
+     * Settings export. Deliberately excludes counters, logs and the device
+     * profile: those describe this handset, not the configuration the user
+     * wants to copy to another node.
+     */
+    fun exportJson(): String = JSONObject()
+        .put("schema", EXPORT_SCHEMA)
+        .put("node_id", nodeId)
+        .put("backend_url", backendUrl)
+        .put("token", token)
+        .put("auto_start", autoStart)
+        .put("sms_enabled", smsEnabled)
+        .put("sms_numbers", smsNumbers)
+        .put("sms_subscription_id", smsSubscriptionId)
+        .put("collection_enabled", collectionEnabled)
+        .put("streaming_enabled", streamingEnabled)
+        .put("streaming_url", streamingUrl)
+        .put("use_fixed_location", useFixedLocation)
+        .put("fixed_lat", fixedLat)
+        .put("fixed_lon", fixedLon)
+        .put("input_choice", inputChoice.name)
+        .put("tier_override", tierOverride?.name ?: "AUTO")
+        .put("heartbeat_s", heartbeatS)
+        .put("analysis_budget_ms", analysisBudgetMs)
+        .put("m8_duty", m8Duty)
+        .put("thermal", JSONObject()
+            .put("warm_c", thermalWarmC)
+            .put("hot_c", thermalHotC)
+            .put("critical_c", thermalCriticalC)
+            .put("hard_pause_c", thermalHardPauseC))
+        .put("low_battery_pct", lowBatteryPct)
+        .put("critical_battery_pct", criticalBatteryPct)
+        .put("thresholds", JSONObject(thresholdOverrides() as Map<*, *>))
+        .put("gains", JSONObject()
+            .put("builtin", gainFor("builtin"))
+            .put("headset", gainFor("headset"))
+            .put("usb", gainFor("usb")))
+        .put("wizard_completed", wizardCompleted)
+        .put("charge_limit_confirmed", chargeLimitConfirmed)
+        .put("battery_health_inspected", batteryHealthInspected)
+        .put("overlay_confirmed", overlayConfirmed)
+        .toString(2)
+
+    /** Returns false when the JSON is not a ForestEar settings export. */
+    fun importJson(text: String): Boolean = runCatching {
+        val o = JSONObject(text)
+        if (o.optInt("schema", -1) != EXPORT_SCHEMA) return false
+        val editor = prefs.edit()
+        if (o.has("node_id")) editor.putString("node_id", o.optString("node_id").trim())
+        if (o.has("backend_url")) editor.putString("backend_url", o.optString("backend_url").trim().trimEnd('/'))
+        if (o.has("token")) editor.putString("token", o.optString("token").trim())
+        if (o.has("auto_start")) editor.putBoolean("auto_start", o.optBoolean("auto_start"))
+        if (o.has("sms_enabled")) editor.putBoolean("sms_enabled", o.optBoolean("sms_enabled"))
+        if (o.has("sms_numbers")) editor.putString("sms_numbers", o.optString("sms_numbers"))
+        if (o.has("sms_subscription_id")) editor.putInt("sms_subscription_id", o.optInt("sms_subscription_id", -1))
+        if (o.has("collection_enabled")) editor.putBoolean("collection_enabled", o.optBoolean("collection_enabled"))
+        if (o.has("streaming_enabled")) editor.putBoolean("streaming_enabled", o.optBoolean("streaming_enabled"))
+        if (o.has("streaming_url")) editor.putString("streaming_url", o.optString("streaming_url"))
+        if (o.has("use_fixed_location")) editor.putBoolean("use_fixed_location", o.optBoolean("use_fixed_location"))
+        if (o.has("fixed_lat")) editor.putFloat("fixed_lat", o.optDouble("fixed_lat", 12.9716).toFloat())
+        if (o.has("fixed_lon")) editor.putFloat("fixed_lon", o.optDouble("fixed_lon", 77.5946).toFloat())
+        if (o.has("input_choice")) {
+            val choice = runCatching { InputChoice.valueOf(o.optString("input_choice")) }
+                .getOrDefault(InputChoice.AUTO)
+            editor.putString("input_choice", choice.name)
+        }
+        if (o.has("tier_override")) {
+            val tier = org.forestear.node.device.PerfTier.fromName(o.optString("tier_override"))
+            editor.putString("tier_override", tier?.name ?: "AUTO")
+        }
+        if (o.has("heartbeat_s")) editor.putInt("heartbeat_s", o.optInt("heartbeat_s", 30).coerceAtLeast(5))
+        if (o.has("analysis_budget_ms")) editor.putInt("analysis_budget_ms", o.optInt("analysis_budget_ms", 400).coerceIn(50, 5000))
+        if (o.has("m8_duty")) editor.putInt("m8_duty", o.optInt("m8_duty", 10).coerceAtLeast(1))
+        o.optJSONObject("thermal")?.let { t ->
+            if (t.has("warm_c")) editor.putFloat("thermal_warm_c", t.optDouble("warm_c").toFloat())
+            if (t.has("hot_c")) editor.putFloat("thermal_hot_c", t.optDouble("hot_c").toFloat())
+            if (t.has("critical_c")) editor.putFloat("thermal_critical_c", t.optDouble("critical_c").toFloat())
+            if (t.has("hard_pause_c")) editor.putFloat("thermal_hard_pause_c", t.optDouble("hard_pause_c").toFloat())
+        }
+        if (o.has("low_battery_pct")) editor.putInt("low_battery_pct", o.optInt("low_battery_pct", 20).coerceIn(1, 80))
+        if (o.has("critical_battery_pct")) editor.putInt("critical_battery_pct", o.optInt("critical_battery_pct", 10).coerceIn(1, 50))
+        o.optJSONObject("thresholds")?.let { t ->
+            t.keys().forEach { cls -> editor.putString("threshold_$cls", t.optDouble(cls).toString()) }
+        }
+        o.optJSONObject("gains")?.let { g ->
+            g.keys().forEach { key -> editor.putFloat("gain_$key", g.optDouble(key, 1.0).toFloat().coerceIn(0.25f, 8.0f)) }
+        }
+        if (o.has("wizard_completed")) editor.putBoolean("wizard_completed", o.optBoolean("wizard_completed"))
+        if (o.has("charge_limit_confirmed")) editor.putBoolean("charge_limit_confirmed", o.optBoolean("charge_limit_confirmed"))
+        if (o.has("battery_health_inspected")) editor.putBoolean("battery_health_inspected", o.optBoolean("battery_health_inspected"))
+        if (o.has("overlay_confirmed")) editor.putBoolean("overlay_confirmed", o.optBoolean("overlay_confirmed"))
+        editor.apply()
+        true
+    }.getOrDefault(false)
+
     companion object {
+        const val EXPORT_SCHEMA = 1
+
         @Volatile private var instance: SettingsStore? = null
 
         fun get(context: Context): SettingsStore =

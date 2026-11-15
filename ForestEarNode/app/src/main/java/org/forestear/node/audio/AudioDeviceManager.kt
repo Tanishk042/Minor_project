@@ -42,21 +42,47 @@ class AudioDeviceManager(context: Context) {
     fun wiredHeadset(): AudioDeviceInfo? =
         inputDevices().firstOrNull { it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET }
 
+    fun usbMic(): AudioDeviceInfo? =
+        inputDevices().firstOrNull {
+            it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_USB_DEVICE
+        }
+
     fun builtinMic(): AudioDeviceInfo? =
         inputDevices().firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
 
     fun isWiredHeadsetConnected(): Boolean = wiredHeadset() != null
 
-    /** AUTO prefers a plugged wired headset, otherwise the built-in mic. */
+    fun externalDevices(): List<AudioDeviceInfo> = inputDevices().filter { isExternal(it) }
+
+    /** Stable key for per-input calibration gain. */
+    fun inputKey(device: AudioDeviceInfo?): String = when (device?.type) {
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "headset"
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE -> "usb"
+        AudioDeviceInfo.TYPE_BUILTIN_MIC -> "builtin"
+        null -> "default"
+        else -> "type_${device.type}"
+    }
+
+    /** AUTO prefers USB, then a plugged 3.5 mm headset, then the built-in mic. */
     fun choose(choice: InputChoice): AudioDeviceInfo? {
-        val wired = inputDevices().filter { isExternal(it) }
-        val builtin = inputDevices().filter { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+        val inputs = inputDevices()
+        val wired = inputs.filter { isExternal(it) && !isUsb(it) }
+        val usb = inputs.filter { isUsb(it) }
+        val builtin = inputs.filter { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
         return when (choice) {
+            InputChoice.USB -> usb.firstOrNull()
             InputChoice.WIRED_HEADSET -> wired.firstOrNull()
             InputChoice.BUILTIN -> builtin.firstOrNull()
-            InputChoice.AUTO -> wired.firstOrNull() ?: builtin.firstOrNull()
+            InputChoice.AUTO -> usb.firstOrNull() ?: wired.firstOrNull() ?: builtin.firstOrNull()
         }
     }
+
+    private fun isUsb(device: AudioDeviceInfo): Boolean =
+        device.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            device.type == AudioDeviceInfo.TYPE_USB_DEVICE
 
     /**
      * True when the platform advertises a raw path. Android returns the string

@@ -10,7 +10,7 @@
 #   ./whitelist_battery.sh --check    # verify only
 set -euo pipefail
 
-PKG="org.forestear.node"
+PKG="${FORESTEAR_PACKAGE:-org.forestear.node}"
 ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
 [[ -x "$ADB" ]] || ADB="$(command -v adb || true)"
 [[ -n "$ADB" ]] || { echo "adb not found" >&2; exit 1; }

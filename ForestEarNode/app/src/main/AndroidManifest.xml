@@ -12,6 +12,8 @@
 
     <!-- Keep the node alive on OxygenOS -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Location (platform location or fixed coordinates) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -40,7 +42,6 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.ForestEar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -81,8 +82,13 @@
                 <action android:name="org.forestear.node.COLLECT_OFF" />
                 <action android:name="org.forestear.node.STREAM_ON" />
                 <action android:name="org.forestear.node.STREAM_OFF" />
+                <action android:name="org.forestear.node.CONTINUITY_START" />
+                <action android:name="org.forestear.node.CONTINUITY_STOP" />
+                <action android:name="org.forestear.node.REPROBE" />
                 <action android:name="org.forestear.node.START" />
                 <action android:name="org.forestear.node.STOP" />
+                <action android:name="org.forestear.node.RECORD_RECOVERY" />
+                <action android:name="org.forestear.node.CLEAR_RECOVERY" />
             </intent-filter>
         </receiver>
 
