@@ -31,6 +31,37 @@ estimate colours.
 - Dashboard assets are served with `Cache-Control: no-cache, must-revalidate`,
   so a browser never keeps an old dashboard after an update.
 
+## Changing the basemap (no code edit)
+
+The dashboard asks the backend for its tile settings at
+`GET /dashboard-config`. Values come from `configs/default.yaml`:
+
+```yaml
+dashboard:
+  tile_url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+  tile_attribution: "&copy; OpenStreetMap &copy; CARTO"
+  tile_max_zoom: 19
+```
+
+Edit that block and restart the backend. Environment variables override the
+file, which is convenient for Docker or a one-off run:
+
+```bash
+FORESTEAR_TILE_URL="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" \
+FORESTEAR_TILE_ATTRIBUTION="&copy; OpenStreetMap &copy; CARTO" \
+FORESTEAR_TILE_MAX_ZOOM=19 \
+../.venv/bin/python -m backend.main --port 8000
+```
+
+`tile_url` must be `http(s)` and contain `{z}`, `{x}` and `{y}`; anything else
+is rejected with a log warning and the built-in default is served.
+`tile_max_zoom` is clamped to 1–22. The dashboard starts with the default
+CARTO layer, then swaps to the configured one when the fetch succeeds, so a
+failed request leaves a working map.
+
+`/dashboard-config` is public because the dashboard is public. Never put a
+secret in `tile_url`; a key placed there is visible to every visitor.
+
 ## Offline / no-internet behaviour
 
 The basemap is a third-party tile service. Without internet:
@@ -75,8 +106,15 @@ The tile and marker check was a UI rendering check with synthetic node rows in
 a scratch database (`FORESTEAR_DB=/tmp/forestear_map.db`). It does not claim a
 real TDOA run; use `make demo-gunfire` for that.
 
+Basemap override was checked end to end the same day: running the backend with
+`FORESTEAR_TILE_URL=".../dark_all/..."` made `/dashboard-config` return the
+dark URL, and the browser requested **10 dark tiles** and showed the updated
+attribution (`© OpenStreetMap © CARTO (dark)`), with `#map` still 435.9 px.
+
 ## Tests
 
 `tests/test_api.py::TestDashboard` asserts that the page contains the map panel,
-that the stylesheet sizes `#map`, and that dashboard assets are revalidated.
-Visual rendering is not covered by pytest.
+that the stylesheet sizes `#map`, that dashboard assets are revalidated, and that
+`/dashboard-config` reads YAML, prefers environment variables, rejects a
+non-`http(s)` URL and clamps `tile_max_zoom`. Visual rendering is not covered by
+pytest.

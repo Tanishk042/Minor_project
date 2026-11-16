@@ -117,8 +117,11 @@ species list + hourly Chart.js charts, analytics tab (loads
 `reports/*.json`), event ticker and health grid.
 
 The map uses Leaflet + CARTO basemap tiles, so **basemap tiles need internet**;
-pins and estimate circles still render without it. Details, accuracy caveats
-and the measured rendering check: [`docs/map.md`](docs/map.md).
+pins and estimate circles still render without it. The tile URL, attribution
+and max zoom are configurable in `configs/default.yaml` (`dashboard:`) or with
+`FORESTEAR_TILE_URL` / `FORESTEAR_TILE_ATTRIBUTION` / `FORESTEAR_TILE_MAX_ZOOM`.
+Details, accuracy caveats and the measured rendering check:
+[`docs/map.md`](docs/map.md).
 
 ## Phone node (Android)
 

@@ -20,6 +20,11 @@ services:
       FORESTEAR_TOKEN: ${FORESTEAR_TOKEN:-forestear-dev-token}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # optional basemap override for the dashboard map (see docs/map.md);
+      # empty means "use configs/default.yaml"
+      FORESTEAR_TILE_URL: ${FORESTEAR_TILE_URL:-}
+      FORESTEAR_TILE_ATTRIBUTION: ${FORESTEAR_TILE_ATTRIBUTION:-}
+      FORESTEAR_TILE_MAX_ZOOM: ${FORESTEAR_TILE_MAX_ZOOM:-}
     volumes:
       # state: events db, alert clips, eval reports read by /reports/*
       - ./data:/app/data

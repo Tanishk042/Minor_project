@@ -112,3 +112,14 @@ training:
   batch_size: 32
   snr_range_db: [-5, 20]
   val_fraction: 0.15         # only used when dataset provides no folds
+
+dashboard:
+  # Basemap tiles for the Leaflet map (dashboard/app.js), served to the browser
+  # by GET /dashboard-config. Default: CARTO's public light basemap, no key.
+  # For a self-hosted or offline tile server, change tile_url (and attribution).
+  # Environment overrides: FORESTEAR_TILE_URL, FORESTEAR_TILE_ATTRIBUTION,
+  # FORESTEAR_TILE_MAX_ZOOM.
+  tile_url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+  tile_attribution: "&copy; OpenStreetMap &copy; CARTO"
+  tile_max_zoom: 19
+

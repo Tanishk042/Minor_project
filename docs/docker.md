@@ -30,6 +30,10 @@ FORESTEAR_TOKEN="$(openssl rand -hex 24)" docker compose up -d
 Telegram credentials are passed through if exported:
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (see `docs/telegram_setup.md`).
 
+The dashboard basemap can be overridden without rebuilding the image:
+`FORESTEAR_TILE_URL`, `FORESTEAR_TILE_ATTRIBUTION`, `FORESTEAR_TILE_MAX_ZOOM`
+(see `docs/map.md`). Leave them unset to use `configs/default.yaml`.
+
 ## State
 
 `docker-compose.yml` bind-mounts `./data` and `./reports` so the event database,

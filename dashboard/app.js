@@ -138,15 +138,35 @@ function toast(title, sub, sev) {
 }
 
 /* ---------------------------------------------------------- map */
+const TILE_FALLBACK = {
+  url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  attribution: "&copy; OpenStreetMap &copy; CARTO",
+  maxZoom: 19,
+};
 const map = L.map("map", {
   zoomControl: false, attributionControl: true,
   center: [12.9716, 77.5946], zoom: 15,
 });
 L.control.zoom({ position: "bottomleft" }).addTo(map);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-  attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19,
+let tileLayer = L.tileLayer(TILE_FALLBACK.url, {
+  attribution: TILE_FALLBACK.attribution, maxZoom: TILE_FALLBACK.maxZoom,
 }).addTo(map);
 let mapFit = false;
+
+/* Basemap is configurable server-side (configs/default.yaml -> dashboard,
+   or FORESTEAR_TILE_URL / _ATTRIBUTION / _MAX_ZOOM). The fallback layer is
+   already drawn, so a failed fetch leaves the map working. */
+fetch("/dashboard-config", { cache: "no-store" })
+  .then((r) => (r.ok ? r.json() : null))
+  .then((c) => {
+    if (!c || !c.tile_url || c.tile_url === TILE_FALLBACK.url) return;
+    map.removeLayer(tileLayer);
+    tileLayer = L.tileLayer(c.tile_url, {
+      attribution: c.tile_attribution ?? TILE_FALLBACK.attribution,
+      maxZoom: c.tile_max_zoom || TILE_FALLBACK.maxZoom,
+    }).addTo(map);
+  })
+  .catch(() => { /* keep the fallback basemap */ });
 
 function nodeMarkerId(nid) { return `nm-${nid}`; }
 

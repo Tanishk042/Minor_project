@@ -239,3 +239,47 @@ class TestDashboard:
             r = client.get(path)
             assert r.status_code == 200, path
             assert "no-cache" in r.headers.get("cache-control", ""), path
+
+    def test_dashboard_config_defaults(self, client):
+        c = client.get("/dashboard-config").json()
+        assert c["tile_url"].startswith("https://")
+        for ph in ("{z}", "{x}", "{y}"):
+            assert ph in c["tile_url"]
+        assert "CARTO" in c["tile_attribution"]
+        assert c["tile_max_zoom"] == 19
+
+    def test_dashboard_config_reads_yaml(self, client, monkeypatch):
+        monkeypatch.setitem(bmain.cfg, "dashboard", {
+            "tile_url": "https://tiles.example.org/{z}/{x}/{y}.png",
+            "tile_attribution": "&copy; Example",
+            "tile_max_zoom": 17,
+        })
+        c = client.get("/dashboard-config").json()
+        assert c == {"tile_url": "https://tiles.example.org/{z}/{x}/{y}.png",
+                     "tile_attribution": "&copy; Example",
+                     "tile_max_zoom": 17}
+
+    def test_dashboard_config_env_wins(self, client, monkeypatch):
+        monkeypatch.setitem(bmain.cfg, "dashboard", {
+            "tile_url": "https://config.example/{z}/{x}/{y}.png"})
+        monkeypatch.setenv("FORESTEAR_TILE_URL",
+                           "https://env.example/{z}/{x}/{y}.png")
+        assert client.get("/dashboard-config").json()["tile_url"] == \
+            "https://env.example/{z}/{x}/{y}.png"
+
+    def test_dashboard_config_rejects_bad_url(self, client, monkeypatch):
+        monkeypatch.setitem(bmain.cfg, "dashboard",
+                            {"tile_url": "javascript:alert(1)"})
+        c = client.get("/dashboard-config").json()
+        assert c["tile_url"].startswith("https://{s}.basemaps.cartocdn.com/")
+
+    def test_dashboard_config_clamps_max_zoom(self, client, monkeypatch):
+        monkeypatch.setitem(bmain.cfg, "dashboard", {"tile_max_zoom": 99})
+        assert client.get("/dashboard-config").json()["tile_max_zoom"] == 22
+
+    def test_dashboard_config_empty_env_falls_back_to_yaml(self, client, monkeypatch):
+        monkeypatch.setitem(bmain.cfg, "dashboard", {
+            "tile_url": "https://config.example/{z}/{x}/{y}.png"})
+        monkeypatch.setenv("FORESTEAR_TILE_URL", "")   # compose passes :-}
+        assert client.get("/dashboard-config").json()["tile_url"] == \
+            "https://config.example/{z}/{x}/{y}.png"

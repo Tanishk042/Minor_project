@@ -35,6 +35,57 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"])
 router_alerts = AlertRouter(cfg)
 
+# --- dashboard basemap settings ----------------------------------------
+TILE_DEFAULTS = {
+    "tile_url": "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    "tile_attribution": "&copy; OpenStreetMap &copy; CARTO",
+    "tile_max_zoom": 19,
+}
+
+
+def _tile_raw(key: str, env: str):
+    """Environment wins over configs/default.yaml -> dashboard.<key>.
+
+    An empty environment variable counts as unset so docker-compose can pass
+    `${FORESTEAR_TILE_URL:-}` without overriding the YAML with a blank value.
+    """
+    raw = os.environ.get(env)
+    if raw is None or not raw.strip():
+        raw = (cfg.get("dashboard") or {}).get(key)
+    return raw
+
+
+def _tile_url() -> str:
+    raw = _tile_raw("tile_url", "FORESTEAR_TILE_URL")
+    if raw is None:
+        return TILE_DEFAULTS["tile_url"]
+    value = str(raw).strip()
+    if not value.startswith(("http://", "https://")):
+        log.warning("dashboard tile_url is not http(s); using the default")
+        return TILE_DEFAULTS["tile_url"]
+    missing = [p for p in ("{z}", "{x}", "{y}") if p not in value]
+    if missing:
+        log.warning("dashboard tile_url is missing %s; using the default",
+                    ", ".join(missing))
+        return TILE_DEFAULTS["tile_url"]
+    return value
+
+
+def _tile_attribution() -> str:
+    raw = _tile_raw("tile_attribution", "FORESTEAR_TILE_ATTRIBUTION")
+    return TILE_DEFAULTS["tile_attribution"] if raw is None else str(raw)
+
+
+def _tile_max_zoom() -> int:
+    raw = _tile_raw("tile_max_zoom", "FORESTEAR_TILE_MAX_ZOOM")
+    if raw is None:
+        return int(TILE_DEFAULTS["tile_max_zoom"])
+    try:
+        return max(1, min(22, int(raw)))
+    except (TypeError, ValueError):
+        log.warning("dashboard tile_max_zoom %r is not an integer; using 19", raw)
+        return int(TILE_DEFAULTS["tile_max_zoom"])
+
 # --- simple rate limiting on ingest (per node) -------------------------
 _rate: dict[str, list[float]] = defaultdict(list)
 RATE_LIMIT_PER_MIN = 120
@@ -454,6 +505,21 @@ def estimates(limit: int = 50):
                 for r in rows]
     finally:
         db.close()
+
+
+@app.get("/dashboard-config")
+def dashboard_config():
+    """Basemap settings for the dashboard map.
+
+    Public on purpose: the dashboard itself is unauthenticated and needs this
+    before it can draw a map. Do not put a secret in a tile URL; a key placed
+    there is visible to every dashboard visitor.
+    """
+    return {
+        "tile_url": _tile_url(),
+        "tile_attribution": _tile_attribution(),
+        "tile_max_zoom": _tile_max_zoom(),
+    }
 
 
 @app.get("/health")
