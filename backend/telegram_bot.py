@@ -2,6 +2,10 @@
 
 Optional component: lets a ranger ACK an alert or query status from Telegram.
 Credentials from env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+
+The Bot API base URL is injectable (constructor arg, else TELEGRAM_API_BASE,
+else https://api.telegram.org) so the integration tests can point the client
+at a local fake HTTP server instead of the real Telegram service.
 """
 from __future__ import annotations
 
@@ -12,21 +16,30 @@ import httpx
 
 log = logging.getLogger("forestear.telegram_bot")
 
+DEFAULT_API_BASE = "https://api.telegram.org"
+
 
 class TelegramBot:
     """Minimal long-polling bot: /status, /ack <id>, /events."""
 
-    def __init__(self, token: str | None = None, backend_url: str = "http://127.0.0.1:8000"):
+    def __init__(self, token: str | None = None,
+                 backend_url: str = "http://127.0.0.1:8000",
+                 api_base: str | None = None):
         self.token = token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
         self.backend = backend_url.rstrip("/")
+        self.api_base = (api_base or os.environ.get("TELEGRAM_API_BASE")
+                         or DEFAULT_API_BASE).rstrip("/")
         self.offset = 0
+
+    def _url(self, method: str) -> str:
+        return f"{self.api_base}/bot{self.token}/{method}"
 
     def poll_once(self) -> list[dict]:
         if not self.token:
             return []
         try:
             with httpx.Client(timeout=15) as c:
-                r = c.get(f"https://api.telegram.org/bot{self.token}/getUpdates",
+                r = c.get(self._url("getUpdates"),
                           params={"timeout": 10, "offset": self.offset})
                 data = r.json()
             ups = data.get("result", [])
@@ -39,7 +52,7 @@ class TelegramBot:
 
     def send(self, chat_id: str, text: str) -> None:
         with httpx.Client(timeout=10) as c:
-            c.post(f"https://api.telegram.org/bot{self.token}/sendMessage",
+            c.post(self._url("sendMessage"),
                    json={"chat_id": chat_id, "text": text})
 
     def handle_update(self, up: dict) -> None:

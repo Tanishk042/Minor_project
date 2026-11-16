@@ -19,3 +19,6 @@ __pycache__/
 # scratch
 *.log
 nohup.out
+
+# docker compose smoke-test state
+.docker-test/

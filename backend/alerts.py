@@ -3,6 +3,10 @@
 Telegram credentials via env (never in repo): TELEGRAM_BOT_TOKEN,
 TELEGRAM_CHAT_ID. dry_run mode logs the message to console (default true in
 configs/default.yaml so the demo works without any secrets).
+
+The Bot API base URL is configurable (alerts.telegram.api_base in the YAML,
+else TELEGRAM_API_BASE, else https://api.telegram.org). Tests point it at a
+local fake HTTP server; the default never changes for real deployments.
 """
 from __future__ import annotations
 
@@ -16,6 +20,8 @@ from common.config import load_config
 
 log = logging.getLogger("forestear.alerts")
 
+DEFAULT_API_BASE = "https://api.telegram.org"
+
 
 class AlertRouter:
     def __init__(self, cfg: dict | None = None):
@@ -25,6 +31,9 @@ class AlertRouter:
         self.enabled = bool(tg.get("enable", False)) and not self.dry_run
         self.token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         self.chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        self.api_base = (str(tg.get("api_base") or "")
+                         or os.environ.get("TELEGRAM_API_BASE", "")
+                         or DEFAULT_API_BASE).rstrip("/")
         if self.enabled and (not self.token or not self.chat_id):
             log.warning("Telegram enabled but TELEGRAM_BOT_TOKEN/CHAT_ID missing;"
                         " falling back to dry-run")
@@ -71,7 +80,7 @@ class AlertRouter:
         try:
             with httpx.Client(timeout=10) as c:
                 r = c.post(
-                    f"https://api.telegram.org/bot{self.token}/sendMessage",
+                    f"{self.api_base}/bot{self.token}/sendMessage",
                     json={"chat_id": self.chat_id, "text": msg,
                           "parse_mode": "HTML"})
             ok = r.status_code == 200

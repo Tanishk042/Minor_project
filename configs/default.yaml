@@ -87,6 +87,8 @@ alerts:
   telegram:
     enable: false            # set true + env vars TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
     dry_run: true            # log alert text to console instead of sending
+    # api_base: "https://api.telegram.org"   # override only for tests/mirrors;
+    # TELEGRAM_API_BASE env var takes precedence over this value
   dedup_window_s: 45         # cross-node dedup window for the same class
   clip_enable: true          # attach 5 s clips for non-speech classes (never for human)
 

@@ -7,7 +7,8 @@ PIP := $(if $(wildcard ../.venv/bin/pip),../.venv/bin/pip,pip3)
 .DEFAULT_GOAL := help
 
 .PHONY: help setup data dataset cache train export eval test demo backend \
-        smoke clean sim-clean
+        smoke clean sim-clean load-test field-eval docker-build docker-up \
+        docker-down telegram-test
 
 help: ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -72,6 +73,25 @@ agent-file: ## edge agent replaying a wav file/dir
 # ------------------------------------------------------------- quality
 test: ## run the pytest suite
 	$(PY) -m pytest tests/ -q
+
+telegram-test: ## Telegram client tests against a local fake server (no network)
+	$(PY) -m pytest tests/test_telegram.py -v
+
+load-test: ## 20 simulated nodes -> running backend (see docs/load_test.md)
+	$(PY) scripts/load_test.py --nodes 20 --duration 20 --rate 0.5 \
+	  --out reports/load_test.json
+
+field-eval: ## evaluate real field audio in data/field (see docs/field_eval.md)
+	$(PY) scripts/field_eval.py --dir data/field
+
+docker-build: ## build the backend container (lightweight deps)
+	docker compose build
+
+docker-up: ## start backend container on http://127.0.0.1:8000
+	docker compose up -d
+
+docker-down: ## stop the backend container
+	docker compose down
 
 clean: ## remove caches and scratch (keeps data/, models_store/)
 	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true

@@ -3,6 +3,8 @@ suppressed_events."""
 from __future__ import annotations
 
 import datetime as dt
+import os
+from pathlib import Path
 
 from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Integer,
                         String, Text, create_engine)
@@ -10,7 +12,9 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from common.config import REPO_ROOT
 
-DB_PATH = REPO_ROOT / "data" / "backend.db"
+# FORESTEAR_DB lets tests / load runs point at a throwaway database so the
+# demo data in data/backend.db is never polluted.
+DB_PATH = Path(os.environ.get("FORESTEAR_DB", str(REPO_ROOT / "data" / "backend.db")))
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
 

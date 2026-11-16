@@ -1,0 +1,32 @@
+{
+  "measured_at_utc": "2026-11-16T13:11:02.983059+00:00",
+  "target_url": "http://127.0.0.1:8765",
+  "config": {
+    "nodes": 20,
+    "duration_s": 20.0,
+    "rate_per_node_per_s": 0.5,
+    "event_ratio": 0.2,
+    "timeout_s": 10.0
+  },
+  "requests_total": 200,
+  "requests_ok": 200,
+  "requests_failed": 0,
+  "status_codes": {
+    "200": 200
+  },
+  "throughput_req_per_s": 9.99,
+  "latency_ms": {
+    "mean": 50.46,
+    "p50": 42.70824999548495,
+    "p95": 110.52208300679922,
+    "p99": 141.06258400715888,
+    "max": 163.28
+  },
+  "elapsed_s": 20.01,
+  "errors_sample": [],
+  "notes": [
+    "Measured on this machine against this backend process only.",
+    "The backend is single-process SQLite: throughput is not a",
+    "multi-node production capacity claim."
+  ]
+}

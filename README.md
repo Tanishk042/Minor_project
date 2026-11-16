@@ -52,7 +52,7 @@ make eval           # full evaluation -> reports/ (JSON + summary.md)
 
 make backend        # FastAPI + dashboard at http://127.0.0.1:8000
 make demo           # 4 virtual forest nodes -> backend (needs `make train`)
-make test           # pytest suite (106 tests)
+make test           # pytest suite (133 tests)
 ```
 
 `make data` needs ~2 GB and a few minutes (parallel downloads, resumable).
@@ -252,14 +252,19 @@ docs/                    architecture.md, model_cards.md, demo_script.md,
 
 ## Data attributions
 
-- **ESC-50** (Piczak) — CC-BY-NC, github.com/karolpiczak/esc-50
-- **UrbanSound8K** (Salamon, Jacoby, Bello) — research license, via the
-  HuggingFace mirror per-clip + community metadata CSV
-- **FSD50K** (Fonseca et al.) — CC-BY-NC, via the Fhrozen HuggingFace mirror
-- **YAMNet** (Google) — Apache 2.0 (SavedModel + official TFLite builds)
-- **BirdNET 2.4** (Kahl et al., Cornell) — CC-BY-NC-SA, INT8 TFLite build
+Full third-party inventory with links and redistribution notes: [`NOTICE.md`](NOTICE.md).
+Original source code is MIT-licensed ([`LICENSE`](LICENSE)); models and datasets
+keep their own licenses.
 
-Check each dataset's terms before redistributing any derived artifacts.
+- **ESC-50** (Piczak) — CC BY-NC 3.0, github.com/karolpiczak/esc-50
+- **UrbanSound8K** (Salamon, Jacoby, Bello) — CC BY-NC 3.0, via the
+  HuggingFace mirror per-clip + community metadata CSV
+- **FSD50K** (Fonseca et al.) — CC BY 4.0, via the Fhrozen HuggingFace mirror
+- **YAMNet** (Google) — Apache 2.0 (SavedModel + official TFLite builds)
+- **BirdNET 2.4** (Kahl et al., Cornell) — CC BY-NC-SA 4.0, INT8 TFLite build
+
+Several of these are non-commercial. Check each dataset's terms before
+redistributing any derived artifacts or deploying commercially.
 
 ## Tests
 
@@ -274,3 +279,36 @@ reset), fold discipline + leakage guards, metric helpers (cross-checked
 against sklearn), TDOA solver accuracy + ambiguity handling, API contract
 (token auth, ingest/query/WS relay, isolated temp DB), offline queue flush,
 privacy clip rule.
+
+## Operations, privacy and CI
+
+These are the non-model parts of running ForestEar. Every number quoted in the
+linked docs was measured on this checkout; anything unexercised says so.
+
+| Topic | Doc | Status |
+|---|---|---|
+| Docker backend image + compose | [`docs/docker.md`](docs/docker.md) | built and exercised locally (388 MB image) |
+| Telegram alerts (fake-server tests + manual test) | [`docs/telegram_setup.md`](docs/telegram_setup.md) | 11 automated tests pass; real bot delivery **not verified** |
+| Backend load test | [`docs/load_test.md`](docs/load_test.md) | measured: 20 nodes, 37.98 req/s, 0 errors, p95 119 ms |
+| Field-audio evaluation | [`docs/field_eval.md`](docs/field_eval.md) | harness tested; **no real field audio evaluated** |
+| Privacy, consent and retention | [`docs/PRIVACY.md`](docs/PRIVACY.md) | policy text; retention is manual, not enforced |
+| CI (pytest) | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | configured; not yet run on GitHub |
+| License and attributions | [`LICENSE`](LICENSE), [`NOTICE.md`](NOTICE.md) | present |
+
+Useful commands:
+
+```bash
+docker compose build && docker compose up -d      # backend container
+../.venv/bin/python scripts/load_test.py --nodes 20 --duration 20
+../.venv/bin/python scripts/field_eval.py --dir data/field --dry-run
+```
+
+Honest limits that apply to all of the above:
+
+- The backend token is a shared dev credential over HTTP; put TLS and real auth
+  in front before exposing it.
+- Telegram delivery to a real chat has not been tested from this workspace.
+- No field recordings have been evaluated, so there are no field accuracy or
+  false-alarm numbers.
+- Docker compose was tested on one laptop; SQLite and a single process are not
+  a production multi-node deployment.

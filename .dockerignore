@@ -1,0 +1,39 @@
+# Keep the build context small; the image copies only backend deps + source.
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.DS_Store
+*.log
+nohup.out
+
+# data and artifacts are mounted at runtime, never baked in
+data/
+models_store/
+reports/
+ml/models_store/
+*.db
+*.db-journal
+*.db-wal
+*.tflite
+*.f32
+*.npz
+*.npy
+*.pkl
+*.joblib
+*.bin
+
+# host-only workflows
+simulator/
+tests/
+scripts/
+Makefile
+pytest.ini
+docker-compose.yml
