@@ -15,13 +15,19 @@ enum class InputChoice { AUTO, BUILTIN, WIRED_HEADSET, USB }
 class SettingsStore private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("forestear_settings", Context.MODE_PRIVATE)
+    private val tokenStore = TokenStore(PrefsKeyValueStore(prefs), KeystoreTokenCipher())
+
+    /** "android-keystore-aes-gcm", "plaintext-fallback", or "unset". */
+    val tokenStorageMode: String get() = tokenStore.storageMode
+
+    /** True only when the token is encrypted at rest. */
+    val tokenEncrypted: Boolean get() = tokenStore.isEncrypted()
 
     fun applyDefaults(config: AppConfig) {
         if (prefs.getBoolean("initialized", false)) return
         prefs.edit()
             .putString("node_id", "node-01")
             .putString("backend_url", "http://127.0.0.1:8000")
-            .putString("token", "forestear-dev-token")
             .putBoolean("auto_start", true)
             .putBoolean("sms_enabled", false)
             .putBoolean("collection_enabled", false)
@@ -61,8 +67,43 @@ class SettingsStore private constructor(context: Context) {
             .putBoolean("mock_capabilities", false)
             .putString("continuity_result", "")
             .putInt("continuity_minutes", 5)
+            .putBoolean("consent_accepted", false)
+            .putString("consent_accepted_utc", "")
+            .putInt("consent_version", 0)
+            .putInt("retention_days", 30)
             .putBoolean("initialized", true)
             .apply()
+        tokenStore.set("forestear-dev-token")
+    }
+
+    /** Consent gate: false until the operator accepts the current notice. */
+    var consentAccepted: Boolean
+        get() = prefs.getBoolean("consent_accepted", false)
+        set(v) = prefs.edit().putBoolean("consent_accepted", v).apply()
+
+    var consentAcceptedUtc: String
+        get() = prefs.getString("consent_accepted_utc", "") ?: ""
+        set(v) = prefs.edit().putString("consent_accepted_utc", v).apply()
+
+    var consentVersion: Int
+        get() = prefs.getInt("consent_version", 0)
+        set(v) = prefs.edit().putInt("consent_version", v).apply()
+
+    /** Operator's stated retention for events/clips; shown, not enforced. */
+    var retentionDays: Int
+        get() = prefs.getInt("retention_days", 30).coerceIn(1, 3650)
+        set(v) = prefs.edit().putInt("retention_days", v.coerceIn(1, 3650)).apply()
+
+    fun acceptConsent(version: Int = CONSENT_VERSION) {
+        prefs.edit()
+            .putBoolean("consent_accepted", true)
+            .putString("consent_accepted_utc", java.time.Instant.now().toString())
+            .putInt("consent_version", version)
+            .apply()
+    }
+
+    fun revokeConsent() {
+        prefs.edit().putBoolean("consent_accepted", false).apply()
     }
 
     var nodeId: String
@@ -74,8 +115,8 @@ class SettingsStore private constructor(context: Context) {
         set(v) = prefs.edit().putString("backend_url", v.trim().trimEnd('/')).apply()
 
     var token: String
-        get() = prefs.getString("token", "forestear-dev-token") ?: ""
-        set(v) = prefs.edit().putString("token", v.trim()).apply()
+        get() = tokenStore.get()
+        set(v) = tokenStore.set(v)
 
     var autoStart: Boolean
         get() = prefs.getBoolean("auto_start", true)
@@ -352,7 +393,10 @@ class SettingsStore private constructor(context: Context) {
         .put("schema", EXPORT_SCHEMA)
         .put("node_id", nodeId)
         .put("backend_url", backendUrl)
-        .put("token", token)
+        // The backend token is intentionally NOT exported: exports are shared
+        // as plain files. Re-enter the token after importing on a new phone.
+        .put("token_included", false)
+        .put("token_storage_mode", tokenStorageMode)
         .put("auto_start", autoStart)
         .put("sms_enabled", smsEnabled)
         .put("sms_numbers", smsNumbers)
@@ -390,10 +434,12 @@ class SettingsStore private constructor(context: Context) {
     fun importJson(text: String): Boolean = runCatching {
         val o = JSONObject(text)
         if (o.optInt("schema", -1) != EXPORT_SCHEMA) return false
+        // Legacy exports may contain a token; new exports never do. Accept it
+        // if present and store it through the encrypted path.
+        val importedToken = if (o.has("token")) o.optString("token").trim() else ""
         val editor = prefs.edit()
         if (o.has("node_id")) editor.putString("node_id", o.optString("node_id").trim())
         if (o.has("backend_url")) editor.putString("backend_url", o.optString("backend_url").trim().trimEnd('/'))
-        if (o.has("token")) editor.putString("token", o.optString("token").trim())
         if (o.has("auto_start")) editor.putBoolean("auto_start", o.optBoolean("auto_start"))
         if (o.has("sms_enabled")) editor.putBoolean("sms_enabled", o.optBoolean("sms_enabled"))
         if (o.has("sms_numbers")) editor.putString("sms_numbers", o.optString("sms_numbers"))
@@ -435,11 +481,13 @@ class SettingsStore private constructor(context: Context) {
         if (o.has("battery_health_inspected")) editor.putBoolean("battery_health_inspected", o.optBoolean("battery_health_inspected"))
         if (o.has("overlay_confirmed")) editor.putBoolean("overlay_confirmed", o.optBoolean("overlay_confirmed"))
         editor.apply()
+        if (importedToken.isNotEmpty()) tokenStore.set(importedToken)
         true
     }.getOrDefault(false)
 
     companion object {
         const val EXPORT_SCHEMA = 1
+        const val CONSENT_VERSION = 1
 
         @Volatile private var instance: SettingsStore? = null
 

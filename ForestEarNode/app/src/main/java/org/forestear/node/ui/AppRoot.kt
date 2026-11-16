@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -39,7 +40,9 @@ import org.forestear.node.service.NodeService
 import org.forestear.node.service.NodeState
 import org.forestear.node.settings.SettingsStore
 import org.forestear.node.ui.screens.CalibrationScreen
+import org.forestear.node.ui.screens.ConsentScreen
 import org.forestear.node.ui.screens.DiagnosticsScreen
+import org.forestear.node.ui.screens.PrivacyScreen
 import org.forestear.node.ui.screens.SettingsScreen
 import org.forestear.node.ui.screens.SetupScreen
 import org.forestear.node.ui.screens.StatusScreen
@@ -53,6 +56,7 @@ enum class AppTab(val label: String, val icon: ImageVector, val inBar: Boolean =
     SETTINGS("Settings", Icons.Filled.Settings),
     TOOLS("Tools", Icons.Filled.Build),
     CALIBRATION("Calibration", Icons.Filled.Build, inBar = false),
+    PRIVACY("Privacy", Icons.Filled.Lock, inBar = false),
 }
 
 @Composable
@@ -71,6 +75,7 @@ fun AppRoot(
         mutableStateOf(if (settings.setupComplete) AppTab.STATUS.name else AppTab.SETUP.name)
     }
     val tab = runCatching { AppTab.valueOf(tabName) }.getOrDefault(AppTab.STATUS)
+    var consent by remember { mutableStateOf(settings.consentAccepted) }
 
     fun startMonitoring() {
         if (!permissions.mic) {
@@ -88,6 +93,16 @@ fun AppRoot(
                 modifier = Modifier.padding(24.dp),
             )
         }
+        return
+    }
+
+    if (!consent) {
+        ConsentScreen(
+            onAccept = {
+                settings.acceptConsent()
+                consent = true
+            },
+        )
         return
     }
 
@@ -139,6 +154,7 @@ fun AppRoot(
                         permissions = permissions,
                         onRequest = requestPermissions,
                         onOpenCalibration = { tabName = AppTab.CALIBRATION.name },
+                        onOpenPrivacy = { tabName = AppTab.PRIVACY.name },
                     )
                     AppTab.TOOLS -> ToolsScreen(
                         status = status,
@@ -149,6 +165,10 @@ fun AppRoot(
                         permissions = permissions,
                         onRequest = requestPermissions,
                         onBack = { tabName = AppTab.TOOLS.name },
+                    )
+                    AppTab.PRIVACY -> PrivacyScreen(
+                        status = status,
+                        onBack = { tabName = AppTab.SETTINGS.name },
                     )
                 }
             }

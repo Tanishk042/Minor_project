@@ -22,3 +22,8 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Release signing material — never commit
+keystore.properties
+*.jks
+*.keystore

@@ -64,6 +64,7 @@ fun SettingsScreen(
     permissions: PermissionSnapshot,
     onRequest: (Array<String>) -> Unit,
     onOpenCalibration: () -> Unit,
+    onOpenPrivacy: () -> Unit,
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.get(context) }
@@ -560,10 +561,29 @@ fun SettingsScreen(
         }
 
         SectionCard(
+            title = "Privacy and retention",
+            subtitle = "Consent status, token encryption, retention policy and local-audio " +
+                "deletion live on one screen.",
+        ) {
+            KeyValueRow(
+                "Backend token",
+                when (settings.token.let { settings.tokenStorageMode }) {
+                    "plaintext-fallback" -> "PLAINTEXT FALLBACK"
+                    "unset" -> "not set"
+                    else -> "encrypted (Keystore)"
+                },
+                if (settings.tokenEncrypted) ForestGreen else ForestAmber,
+            )
+            OutlinedButton(onClick = onOpenPrivacy, modifier = Modifier.fillMaxWidth()) {
+                Text("Open privacy and retention", fontSize = 12.sp)
+            }
+        }
+
+        SectionCard(
             title = "Device profile and settings files",
             subtitle = "The capability probe runs on first launch and after every app update. " +
-                "Export/import moves configuration only; it never includes audio, logs or the " +
-                "device profile.",
+                "Export/import moves configuration only; it never includes audio, logs, the " +
+                "device profile or the backend token.",
         ) {
             val device = remember { deviceStore.load() }
             KeyValueRow("Profile file", deviceStore.path())

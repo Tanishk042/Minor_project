@@ -80,7 +80,7 @@ model, feature formula or config changes.
 ./gradlew :app:testDebugUnitTest
 ```
 
-**79 tests across 12 suites, all passing on this checkout:**
+**87 tests across 13 suites, all passing on this checkout:**
 
 | Suite | What it locks down |
 |---|---|
@@ -96,6 +96,7 @@ model, feature formula or config changes.
 | `ResamplerTest` | identity scaling, 48k→16k length, DC continuity across blocks, rate negotiation |
 | `SntpTest` | 48-byte request, offset/delay maths on a synthetic reply, zero/short timestamp rejection |
 | `CompatibilityReportTest` | unmeasured tier, NOT RUN recovery rows, pipe escaping, file slugs |
+| `TokenStoreTest` | encrypted round-trip, legacy plaintext migration, Keystore-failure fallback, unreadable ciphertext, clearing |
 
 ### Instrumented (needs a device/emulator)
 
@@ -110,6 +111,8 @@ model, feature formula or config changes.
 - `DeviceAdaptationTest` exercises the probe, a deliberately incomplete mock
   profile, the shipped OEM table, the compatibility report and the
   recovery recorder without a running service.
+- `TokenKeystoreTest` proves the real Android Keystore path encrypts the token
+  and leaves no plaintext in SharedPreferences.
 
 **These instrumented tests are written but have not been run in this
 repository.** No on-phone latency, CPU or RAM number is claimed until you run
@@ -256,7 +259,10 @@ finish + benchmark. Verified items are checked by the OS; everything else is
 marked "confirm manually". Settings commit live and cover node ID, backend,
 token, thresholds, tier override, input, coordinates, SMS and the developer
 mock/collection toggles. Configuration exports/imports as JSON (schema `1`,
-counters/logs/device profile excluded).
+counters/logs/device profile excluded, and the backend token is **never
+exported**). The first launch shows a consent gate; Settings → Privacy and
+retention shows token-encryption status, the retention policy and a local-audio
+delete action.
 
 ---
 
