@@ -562,7 +562,22 @@ async def _start():
 
 
 # serve dashboard (static) at /
-app.mount("/", StaticFiles(directory=str(REPO_ROOT / "dashboard"), html=True),
+class NoCacheStaticFiles(StaticFiles):
+    """Dashboard files change between runs; make browsers revalidate them.
+
+    StaticFiles already sends ETag/Last-Modified, but without Cache-Control a
+    browser may reuse a stale copy heuristically. That is how an operator ends
+    up looking at an old dashboard after an update.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
+app.mount("/", NoCacheStaticFiles(directory=str(REPO_ROOT / "dashboard"),
+                                  html=True),
           name="dashboard")
 
 

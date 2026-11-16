@@ -213,3 +213,29 @@ class TestWebSocket:
                     break
             assert msg and msg["type"] == "event"
             assert msg["class"] == "chainsaw"
+
+
+class TestDashboard:
+    """The dashboard map is a shipped feature, so its wiring is regression-tested.
+
+    These checks assert structure and cache headers, not visual rendering; a
+    headless browser was used separately to confirm tiles and markers appear.
+    """
+
+    def test_page_contains_map_panel(self, client):
+        page = client.get("/")
+        assert page.status_code == 200
+        assert 'id="map"' in page.text
+        assert "leaflet" in page.text.lower()
+
+    def test_map_container_has_explicit_height(self, client):
+        css = client.get("/style.css").text
+        # Without a sized container Leaflet renders into a zero-height box.
+        assert "#map {" in css
+        assert "height: 100%" in css
+
+    def test_assets_are_revalidated(self, client):
+        for path in ("/style.css", "/app.js"):
+            r = client.get(path)
+            assert r.status_code == 200, path
+            assert "no-cache" in r.headers.get("cache-control", ""), path

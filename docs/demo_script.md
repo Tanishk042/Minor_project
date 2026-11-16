@@ -80,7 +80,8 @@ make demo-gunfire
 time-difference-of-arrival and the map draws a **position + uncertainty
 circle** (green). The estimates tab / feed shows the method (`tdoa`),
 nodes used and radius. With 2 nodes it degrades honestly to a bearing
-band; with 1 node to a coarse radius (never a fake position).
+band; with 1 node to a coarse radius (never a fake position). The basemap
+tiles need internet; pins and circles render without it.
 
 The scenario fires six synthetic impulses (21–71 s). The deployed 20 s
 gunshot cooldown turns those into three alerts; each is solved on all four

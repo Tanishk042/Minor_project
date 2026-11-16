@@ -96,7 +96,12 @@ $$(".tab").forEach((t) => {
     $$(".tab-panel").forEach((x) => x.classList.remove("is-active"));
     t.classList.add("is-active");
     $("#panel-" + t.dataset.tab).classList.add("is-active");
-    requestAnimationFrame(resizeCharts);
+    requestAnimationFrame(() => {
+      resizeCharts();
+      // Leaflet caches the container size; re-measure after a tab switch so the
+      // map is not left blank when returning to the live panel.
+      if (t.dataset.tab === "live") { try { map.invalidateSize(); } catch {} }
+    });
     updateHeader();
   });
 });

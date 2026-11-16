@@ -116,6 +116,10 @@ with expandable per-model detail, thunder-veto feed, biodiversity tab with
 species list + hourly Chart.js charts, analytics tab (loads
 `reports/*.json`), event ticker and health grid.
 
+The map uses Leaflet + CARTO basemap tiles, so **basemap tiles need internet**;
+pins and estimate circles still render without it. Details, accuracy caveats
+and the measured rendering check: [`docs/map.md`](docs/map.md).
+
 ## Phone node (Android)
 
 `android/ForestEarNode/` is a second, fully on-phone implementation of the
