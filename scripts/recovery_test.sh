@@ -40,7 +40,16 @@ ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
 RECEIVER="$PKG/.service.ControlReceiver"
 ACTIVITY="$PKG/.MainActivity"
 
-sh_() { "$ADB" shell "$@" 2>/dev/null | tr -d '\r'; }
+# `adb shell` joins its arguments into one remote command line. Quoting each
+# argument here is essential: without it a value like "NOT RUN" arrives as two
+# tokens and the receiver rejects the record.
+sh_() {
+  local cmd="" arg
+  for arg in "$@"; do
+    cmd+=" $(printf '%q' "$arg")"
+  done
+  "$ADB" shell "$cmd" 2>/dev/null | tr -d '\r'
+}
 
 pid_of() {
   local p

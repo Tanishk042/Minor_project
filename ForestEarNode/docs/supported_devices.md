@@ -1,8 +1,8 @@
 # Supported devices
 
-> Generated from `android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` by `android/tools/generate_oem_docs.py`. Do not edit by hand: edit the JSON asset and re-run the generator.
+> Generated from `android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` and `android/device_evidence/measured_devices.json` by `android/tools/generate_oem_docs.py`. Do not edit by hand: edit the JSON files and re-run the generator.
 
-Table version: `1` (updated `2026-11-15T00:00:00Z`). Generated: `2026-11-15T17:17:13Z`.
+Table version: `1` (updated `2026-11-15T00:00:00Z`). Generated: `2026-11-17T09:49:30Z`.
 
 ForestEar Node runs on **any Android 8.0+ (API 26) device with a microphone**. There is no allowlist and no Play Services dependency. "Supported" on this page means only that the app will attempt to run and will report what it finds; it is not a claim that every handset has been measured.
 
@@ -10,11 +10,11 @@ At first launch and after every app update the app probes the handset and writes
 
 ## Measured on real hardware
 
-**No handset measurement is recorded in this repository yet.** The JVM parity tests run on the development laptop; on-phone latency, CPU, RAM, thermal, SMS and recovery-path results require a connected device. When you run them, the app writes `docs/compatibility_report_<model>.md` on the phone. Do not add a device to this section until that file exists.
+Only devices with a pulled `compatibility_report_<model>.md` and its supporting evidence are listed here. JVM parity tests alone do not qualify a handset.
 
 | Device | Android | Tier | Measured pipeline | Recovery paths | Report |
 |---|---|---|---|---|---|
-| _(none recorded)_ | — | — | not measured | not run | — |
+| OnePlus CPH2381 | 14 (API 34), OxygenOS, security patch 2026-08-01 | A | 49.47 ms (android/device_evidence/benchmark_CPH2381.json (detailed per-model run)) | kill_service FAIL (force-stop), swipe_away PASS, screen_off PASS, reboot FAIL, boot_receiver FAIL | [report](../../device_evidence/compatibility_report_CPH2381.md) |
 
 ## Known device profiles
 

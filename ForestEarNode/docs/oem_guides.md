@@ -1,8 +1,8 @@
 # OEM background-protection guides
 
-> Generated from `android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` by `android/tools/generate_oem_docs.py`. Do not edit by hand: edit the JSON asset and re-run the generator.
+> Generated from `android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` and `android/device_evidence/measured_devices.json` by `android/tools/generate_oem_docs.py`. Do not edit by hand: edit the JSON files and re-run the generator.
 
-Table version: `1` (updated `2026-11-15T00:00:00Z`). Generated: `2026-11-15T17:17:13Z`.
+Table version: `1` (updated `2026-11-15T00:00:00Z`). Generated: `2026-11-17T09:49:30Z`.
 
 Android has no public API for most maker-specific kill switches, so the app cannot verify them. It shows the plain-language steps below, resolves each deep link before launching it, and records only what you explicitly confirm. The OS-verifiable checks are the battery-optimisation exemption and the overlay permission.
 

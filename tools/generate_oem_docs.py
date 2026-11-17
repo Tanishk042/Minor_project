@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate the OEM setup guides and supported-device matrix from the JSON table.
 
-The JSON asset is the single source of truth used by the app at runtime. These
-Markdown files are generated so the docs cannot drift from what the app actually
-shows. Re-run after editing `ForestEarNode/app/src/main/assets/config/oem_profiles.json`:
+The JSON asset is the single source of truth used by the app at runtime. Measured
+handsets come from `device_evidence/measured_devices.json`, which must point at a
+pulled compatibility report. These Markdown files are generated so the docs cannot
+drift from what the app actually shows. Re-run after editing either JSON file:
 
     python3 android/tools/generate_oem_docs.py
 
@@ -20,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSET = ROOT / "ForestEarNode" / "app" / "src" / "main" / "assets" / "config" / "oem_profiles.json"
+MEASURED = ROOT / "device_evidence" / "measured_devices.json"
 DOCS = ROOT / "ForestEarNode" / "docs"
 
 STEP_TITLES = {
@@ -40,15 +42,25 @@ def load() -> dict:
         return json.load(fh)
 
 
+def load_measured() -> list[dict]:
+    """Real handsets with an on-device compatibility report in device_evidence/."""
+    if not MEASURED.exists():
+        return []
+    with MEASURED.open(encoding="utf-8") as fh:
+        value = json.load(fh)
+    return value if isinstance(value, list) else []
+
+
 def header(data: dict, title: str) -> list[str]:
     updated = data.get("updated_utc", "unknown")
     return [
         f"# {title}",
         "",
         "> Generated from "
-        "`android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` by "
+        "`android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` and "
+        "`android/device_evidence/measured_devices.json` by "
         "`android/tools/generate_oem_docs.py`. Do not edit by hand: edit the JSON "
-        "asset and re-run the generator.",
+        "files and re-run the generator.",
         "",
         f"Table version: `{data.get('schema', '?')}` (updated `{updated}`). "
         f"Generated: `{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}`.",
@@ -141,7 +153,7 @@ def oem_guides(data: dict) -> str:
     return "\n".join(lines)
 
 
-def supported_devices(data: dict) -> str:
+def supported_devices(data: dict, measured: list[dict]) -> str:
     lines = header(data, "Supported devices")
     lines += [
         "ForestEar Node runs on **any Android 8.0+ (API 26) device with a "
@@ -158,16 +170,44 @@ def supported_devices(data: dict) -> str:
         "",
         "## Measured on real hardware",
         "",
-        "**No handset measurement is recorded in this repository yet.** The JVM "
-        "parity tests run on the development laptop; on-phone latency, CPU, RAM, "
-        "thermal, SMS and recovery-path results require a connected device. When you "
-        "run them, the app writes `docs/compatibility_report_<model>.md` on the "
-        "phone. Do not add a device to this section until that file exists.",
-        "",
-        "| Device | Android | Tier | Measured pipeline | Recovery paths | Report |",
-        "|---|---|---|---|---|---|",
-        "| _(none recorded)_ | — | — | not measured | not run | — |",
-        "",
+    ]
+    if measured:
+        lines += [
+            "Only devices with a pulled `compatibility_report_<model>.md` and its "
+            "supporting evidence are listed here. JVM parity tests alone do not "
+            "qualify a handset.",
+            "",
+            "| Device | Android | Tier | Measured pipeline | Recovery paths | Report |",
+            "|---|---|---|---|---|---|",
+        ]
+        for dev in measured:
+            lines.append(
+                "| {device} | {android} | {tier} | {pipeline} ms ({source}) | "
+                "{recovery} | [report](../../{report}) |".format(
+                    device=dev.get("device", "unknown"),
+                    android=dev.get("android", "unknown"),
+                    tier=dev.get("tier", "unknown"),
+                    pipeline=dev.get("pipeline_ms", "not measured"),
+                    source=dev.get("pipeline_source", "unknown"),
+                    recovery=dev.get("recovery", "not run"),
+                    report=dev.get("report", "#"),
+                )
+            )
+        lines.append("")
+    else:
+        lines += [
+            "**No handset measurement is recorded in this repository yet.** The JVM "
+            "parity tests run on the development laptop; on-phone latency, CPU, RAM, "
+            "thermal, SMS and recovery-path results require a connected device. When "
+            "you run them, the app writes `docs/compatibility_report_<model>.md` on "
+            "the phone. Do not add a device to this section until that file exists.",
+            "",
+            "| Device | Android | Tier | Measured pipeline | Recovery paths | Report |",
+            "|---|---|---|---|---|---|",
+            "| _(none recorded)_ | — | — | not measured | not run | — |",
+            "",
+        ]
+    lines += [
         "## Known device profiles",
         "",
         "A known device only selects a better OEM guide; it does not assert that the "
@@ -262,9 +302,10 @@ def supported_devices(data: dict) -> str:
 
 def main() -> None:
     data = load()
+    measured = load_measured()
     DOCS.mkdir(parents=True, exist_ok=True)
     (DOCS / "oem_guides.md").write_text(oem_guides(data), encoding="utf-8")
-    (DOCS / "supported_devices.md").write_text(supported_devices(data), encoding="utf-8")
+    (DOCS / "supported_devices.md").write_text(supported_devices(data, measured), encoding="utf-8")
     print(f"wrote {DOCS / 'oem_guides.md'}")
     print(f"wrote {DOCS / 'supported_devices.md'}")
 

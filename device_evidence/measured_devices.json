@@ -1,0 +1,27 @@
+[
+  {
+    "device": "OnePlus CPH2381",
+    "android": "14 (API 34), OxygenOS, security patch 2026-08-01",
+    "tier": "A",
+    "pipeline_ms": 49.47,
+    "pipeline_source": "android/device_evidence/benchmark_CPH2381.json (detailed per-model run)",
+    "report_pipeline_ms": 48.72,
+    "report_pipeline_source": "last benchmark stored in app settings when the compatibility report was written",
+    "cpu_pct": 160.87,
+    "ram_mb": 321.09,
+    "self_test": "14 checks / 0 failed / 6 warnings",
+    "continuity": "100% coverage over 303 s, 0 gap events (app-recorded screen-off continuity test)",
+    "recovery": "kill_service FAIL (force-stop), swipe_away PASS, screen_off PASS, reboot FAIL, boot_receiver FAIL",
+    "soak": "started 2026-11-17T09:26:46Z; 24 h report pending",
+    "report": "device_evidence/compatibility_report_CPH2381.md",
+    "evidence": [
+      "device_evidence/benchmark_CPH2381.json",
+      "device_evidence/selftest_CPH2381.json",
+      "device_evidence/selftest_latest_CPH2381.json",
+      "device_evidence/selftest_postrecovery_CPH2381.txt",
+      "device_evidence/recovery_paths_CPH2381.json",
+      "device_evidence/compatibility_report_CPH2381.md"
+    ],
+    "notes": "Measured on the development laptop's adb-connected handset. GPU delegate was unavailable, so the benchmark is CPU-only. The in-app report embeds 48.72 ms from the last settings benchmark while the detailed benchmark JSON records 49.47 ms from a separate run; both are measured, not estimates."
+  }
+]

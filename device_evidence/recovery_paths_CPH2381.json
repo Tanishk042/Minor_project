@@ -1,0 +1,32 @@
+[
+  {
+    "path": "kill_service",
+    "outcome": "FAIL",
+    "detail": "force-stop stopped the service and it did not restart; opening the app is required",
+    "recorded_utc": "2026-11-17T09:17:49.861Z"
+  },
+  {
+    "path": "swipe_away",
+    "outcome": "PASS",
+    "detail": "service was running 30s after the swipe",
+    "recorded_utc": "2026-11-17T09:21:21.320Z"
+  },
+  {
+    "path": "reboot",
+    "outcome": "FAIL",
+    "detail": "service was not running 30 s after boot",
+    "recorded_utc": "2026-11-17T09:25:52.075Z"
+  },
+  {
+    "path": "boot_receiver",
+    "outcome": "FAIL",
+    "detail": "no background restart after boot; open the app (expected on Android 14+ for a microphone FGS)",
+    "recorded_utc": "2026-11-17T09:25:53.246Z"
+  },
+  {
+    "path": "screen_off",
+    "outcome": "PASS",
+    "detail": "coverage 100%, gaps=0, 303s",
+    "recorded_utc": "2026-11-17T09:46:20.103Z"
+  }
+]
