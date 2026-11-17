@@ -51,9 +51,10 @@ make export         # TFLite export + parity check + edge latency benchmark
 make eval           # full evaluation -> reports/ (JSON + summary.md)
 
 cp .env.example .env  # optional: local backend token, CARTO key, Telegram creds
+make security-check # verify no secrets are tracked (see docs/security.md)
 make backend        # FastAPI + dashboard at http://127.0.0.1:8000
 make demo           # 4 virtual forest nodes -> backend (needs `make train`)
-make test           # pytest suite (142 tests)
+make test           # pytest suite (143 tests)
 ```
 
 `make data` needs ~2 GB and a few minutes (parallel downloads, resumable).
@@ -124,13 +125,19 @@ and max zoom are configurable in `configs/default.yaml` (`dashboard:`) or with
 Details, accuracy caveats and the measured rendering check:
 [`docs/map.md`](docs/map.md).
 
+The browser can see the tile URL, so any CARTO key in it is public. Rotate and
+domain-restrict the key before deployment; see
+[`docs/security.md`](docs/security.md). Current verification gaps are tracked
+in [`docs/verification_status.md`](docs/verification_status.md).
+
 ## Phone node (Android)
 
 `android/ForestEarNode/` is a second, fully on-phone implementation of the
-edge agent for one retired **OnePlus Nord CE 2 Lite 5G**. It runs the same
-9 models with TFLite, the same feature contract and the same decision logic;
-the Python code remains the reference and the Android code is parity-tested
-against it.
+edge agent for ordinary **Android 8+ phones with a microphone**. It runs the
+same 9 models with TFLite, the same feature contract and the same decision
+logic; the Python code remains the reference and the Android code is
+parity-tested against it. It was measured on a OnePlus CPH2381 (Android 14);
+no per-device build is required.
 
 - **All inference is local.** Network carries JSON alerts/heartbeats (and, if
   explicitly enabled, raw PCM for debugging). No speech is stored or sent.
@@ -141,9 +148,10 @@ against it.
   AlarmManager watchdog, task-removal restart, battery-exemption wizard,
   thermal governor, low-battery modes, battery CSV, heartbeat telemetry.
 - **Field features**: built-in vs USB-C/TRRS headset mic selection and
-  calibration, dual-SIM SMS fallback for CRITICAL events, opt-in ambient
-  collection with human-presence deletion, raw PCM WebSocket, self-test,
-  CPU-vs-GPU benchmark and a 24 h soak report.
+  calibration, dual-SIM SMS fallback for CRITICAL events (implemented; real
+  delivery not verified), opt-in ambient collection with human-presence
+  deletion, raw PCM WebSocket, self-test, CPU-vs-GPU benchmark and a 24 h soak
+  controller (final report pending).
 - **UI**: Compose app with Status / Setup / Diagnose / Settings / Tools.
 
 Build and test:
@@ -151,16 +159,19 @@ Build and test:
 ```bash
 cd android/ForestEarNode
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk-21.jdk/Contents/Home
-./gradlew :app:testDebugUnitTest     # 11 JVM parity/config/decision tests
+./gradlew :app:testDebugUnitTest     # 88 JVM checks
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Measured JVM parity (this checkout): log-mel max abs diff **1.01e-6**,
-handcrafted **2.88e-8**, M9 trees **1.11e-16** vs Python. Instrumented
-on-phone parity/latency tests are written but **have not been run** here, so
-no phone latency number is claimed. See
+handcrafted **2.88e-8**, M9 trees **1.11e-16** vs Python. Instrumented tests
+**did run on OnePlus CPH2381**: 9 checks across 4 suites, 0 failures, including
+full-pipeline parity, latency budget, device adaptation and real Keystore
+encryption. The measured phone pipeline was **49.47 ms mean** (tier A, CPU only).
+The emulator matrix and signed release are still NOT RUN. See
 [`android/ForestEarNode/README.md`](../android/ForestEarNode/README.md),
+[`android/device_evidence/`](../android/device_evidence/),
 [`docs/phone_setup_nord_ce2_lite.md`](docs/phone_setup_nord_ce2_lite.md) and
 [`docs/HARDWARE.md`](docs/HARDWARE.md).
 

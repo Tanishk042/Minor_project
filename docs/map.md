@@ -89,6 +89,8 @@ here.
 A key used by a browser map is always visible to the browser. Restrict it in
 the CARTO dashboard (allowed referrers/domains, usage limits) and treat a key
 pasted into a chat, ticket or screenshot as compromised — rotate it.
+Step-by-step rotation and the backend hardening checklist are in
+[`security.md`](security.md). Run `make security-check` before committing.
 
 ## Offline / no-internet behaviour
 

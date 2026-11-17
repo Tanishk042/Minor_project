@@ -8,7 +8,7 @@ PIP := $(if $(wildcard ../.venv/bin/pip),../.venv/bin/pip,pip3)
 
 .PHONY: help setup data dataset cache train export eval test demo backend \
         smoke clean sim-clean load-test field-eval docker-build docker-up \
-        docker-down telegram-test
+        docker-down telegram-test security-check
 
 help: ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -73,6 +73,9 @@ agent-file: ## edge agent replaying a wav file/dir
 # ------------------------------------------------------------- quality
 test: ## run the pytest suite
 	$(PY) -m pytest tests/ -q
+
+security-check: ## scan tracked files for secrets; prints paths only, never values
+	$(PY) scripts/security_preflight.py
 
 telegram-test: ## Telegram client tests against a local fake server (no network)
 	$(PY) -m pytest tests/test_telegram.py -v
