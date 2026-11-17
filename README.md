@@ -45,28 +45,39 @@ FORESTEAR_ACTION_PREFIX=org.forestear.node \
 
 ## Measured vs unmeasured
 
-Measured on this checkout:
+Measured on this checkout / on the CPH2381 handset:
 
-- JVM tests: **87 tests across 13 suites, 0 failures** (includes 8 token-storage
+- JVM tests: **88 tests across 13 suites, 0 failures** (includes 8 token-storage
   tests).
+- Instrumented tests: **9 tests across 4 suites on OnePlus CPH2381 (Android 14),
+  0 failures, 0 errors**. Raw XML:
+  `ForestEarNode/app/build/outputs/androidTest-results/connected/debug/TEST-CPH2381 - 14-_app-.xml`.
 - Kotlin vs Python parity: log-mel max abs diff **1.01e-6**, handcrafted
   **2.88e-8**, M9 trees **1.11e-16**.
 - Debug APK builds: **100,471,495 bytes**; models are packaged uncompressed.
-- Instrumented-test sources compile (`compileDebugAndroidTestKotlin`).
-- Release signing config, ABI splits and the release script are implemented;
-  no signed APK was produced because no keystore was supplied.
+- On-phone benchmark: **49.47 ms mean** full pipeline, tier A, CPU/XNNPACK only,
+  **160.87% CPU**, **321.09 MB RAM**; GPU delegate unavailable.
+- In-app self-test: **14 checks, 0 failed, 6 warnings**; headless self-test:
+  **0 failures, 2 warnings**.
+- Recovery: swipe **PASS**, screen-off **PASS** (100% coverage over 303 s),
+  force-kill **FAIL**, reboot **FAIL**, boot receiver **FAIL**; watchdog and
+  microphone theft **NOT RUN**.
+- Compatibility report generated on the phone and pulled into
+  `device_evidence/compatibility_report_CPH2381.md`.
 
-Not measured here (no device or emulator attached):
+Not measured / not verified here:
 
-- on-phone latency, CPU, RAM, thermal behaviour, SMS delivery;
-- the instrumented `connectedDebugAndroidTest` suites, including
-  `TokenKeystoreTest` (real Android Keystore);
-- recovery paths (kill, swipe, reboot, screen-off, microphone theft);
-- 24 h soak and the generated `compatibility_report_<model>.md`;
-- the emulator API matrix (no emulator/system images installed).
+- Signed release APK (no keystore supplied); emulator API matrix (no emulator or
+  system images installed).
+- Real Telegram and SMS delivery; labelled real field audio; real TDOA
+  clock-offset correction.
+- Watchdog and microphone-theft recovery; final 24 h soak report (the scheduled
+  auto-stop job was cancelled and the phone is currently disconnected).
+- SoC junction temperature (not exposed) and per-device microphone response.
 
-No number is claimed until its tool has actually run on a handset. The recovery
-script records unexercised paths as **NOT RUN**, never PASS.
+No number is claimed until its tool actually ran. The recovery script records
+unexercised paths as **NOT RUN**, never PASS. The full list with blockers and
+commands is in [`docs/verification_status.md`](docs/verification_status.md).
 
 ## Hardening and release
 
@@ -82,6 +93,9 @@ script records unexercised paths as **NOT RUN**, never PASS.
   excluded from settings exports. Details and honest fallback behaviour:
   [`docs/privacy_and_token.md`](docs/privacy_and_token.md).
 - **Emulator matrix**: `./scripts/emulator_matrix.sh` (NOT RUN here).
+- **Backend security/deployment**: see `../forestear/docs/security.md` for
+  CARTO key rotation, the TLS/auth checklist and the `make security-check`
+  preflight.
 - **License**: MIT for the source; bundled models and datasets keep their own
   terms. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
 

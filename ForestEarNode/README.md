@@ -80,7 +80,7 @@ model, feature formula or config changes.
 ./gradlew :app:testDebugUnitTest
 ```
 
-**87 tests across 13 suites, all passing on this checkout:**
+**88 tests across 13 suites, all passing on this checkout:**
 
 | Suite | What it locks down |
 |---|---|
@@ -114,10 +114,16 @@ model, feature formula or config changes.
 - `TokenKeystoreTest` proves the real Android Keystore path encrypts the token
   and leaves no plaintext in SharedPreferences.
 
-**These instrumented tests are written but have not been run in this
-repository.** No on-phone latency, CPU or RAM number is claimed until you run
-them and read the output. The laptop-side Python pipeline measured
-**5.56 ms/hop**; the phone is expected to be slower.
+**These instrumented tests ran on OnePlus CPH2381 (Android 14) on
+2026-11-17:** 9 tests across 4 suites, 0 failures, 0 errors — 5
+`DeviceAdaptationTest`, 1 `LatencyTest`, 1 `PipelineParityTest` and 2
+`TokenKeystoreTest`. Raw result:
+`app/build/outputs/androidTest-results/connected/debug/TEST-CPH2381 - 14-_app-.xml`.
+
+Measured on that handset: full pipeline **49.47 ms mean**, tier A, CPU only
+(GPU delegate unavailable), **160.87% CPU**, **321.09 MB RAM**. The earlier
+**5.56 ms/hop** figure is the laptop Python pipeline, not a phone number.
+The emulator matrix and signed release remain NOT RUN.
 
 ---
 
@@ -343,13 +349,21 @@ python3 android/tools/generate_oem_docs.py
 
 ## Honest limitations
 
-- **Instrumented parity/latency tests have not been run here.** JVM parity is
-  measured; on-phone model behaviour, latency, CPU and RAM are not yet measured
-  in this repository. The laptop-side Python pipeline measured **5.56 ms/hop**;
-  that number is not a phone measurement.
-- **No handset has a compatibility report in this checkout.** Recovery paths,
-  thermal behaviour, SMS and 24 h soak results are unrun until you execute the
-  tools on a device. `docs/supported_devices.md` says so explicitly.
+- **Instrumented tests ran on one handset only.** The 9 CPH2381 checks passed,
+  but the emulator matrix (Android 8–15) and other physical devices are NOT RUN.
+  The **5.56 ms/hop** laptop figure is not a phone measurement; use the CPH2381
+  benchmark (49.47 ms) for the phone.
+- **Compatibility evidence exists only for CPH2381.**
+  `../device_evidence/compatibility_report_CPH2381.md` is the canonical
+  phone-generated report. Other rows in `docs/supported_devices.md` are OEM
+  guidance, not measurements.
+- **Recovery is mixed, not all PASS.** Force-kill and reboot are FAIL because
+  Android 14 blocks background microphone foreground-service restart; swipe-away
+  and screen-off are PASS; watchdog and microphone-theft paths are NOT RUN.
+- **Final 24 h soak is pending.** The run started 2026-11-17T09:26:46Z, but the
+  scheduled auto-stop job was cancelled and no final report has been pulled.
+- **Delivery and field accuracy are not verified.** SMS/Telegram real delivery,
+  labelled field audio and real TDOA clock-offset correction remain open.
 - The golden synthetic gunshot window produces M2 **0.906** but M9 gunshot
   **0.131** / benign **0.869**. This is out-of-distribution fusion behaviour on
   a synthetic impulse, not a bug in the port; it is reproduced identically by
