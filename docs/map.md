@@ -92,7 +92,14 @@ pasted into a chat, ticket or screenshot as compromised — rotate it.
 
 ## Offline / no-internet behaviour
 
-The basemap is a third-party tile service. Without internet:
+Leaflet and Chart.js are **vendored** in `dashboard/vendor/`, so the dashboard
+does not need a CDN to boot. If either library is missing, `app.js` guards its
+initialisation: the map panel shows `map unavailable — local map library
+missing`, and the live feed, charts, scores and alerts keep working. (Before
+this guard, a blocked CDN threw at the first `L.map(...)` and left the whole
+page in its placeholder state.)
+
+The basemap itself is still a third-party tile service. Without internet:
 
 - tiles fail to load and the map background is the dashboard's cream colour;
 - node pins, alert pulses and estimate circles still render, because they are
@@ -102,6 +109,10 @@ The basemap is a third-party tile service. Without internet:
 
 For a fully offline deployment you would need to host your own tile server or
 bundle a small regional tile set. Neither is included.
+
+`index.html` loads `style.css?v=2` and `app.js?v=2`. Bump that version when you
+change either file; it stops browsers from running a stale cached copy after an
+upgrade.
 
 ## Accuracy caveats (important)
 
@@ -139,10 +150,22 @@ Basemap override was checked end to end the same day: running the backend with
 dark URL, and the browser requested **10 dark tiles** and showed the updated
 attribution (`© OpenStreetMap © CARTO (dark)`), with `#map` still 435.9 px.
 
+## Verified on this checkout (2026-11-17)
+
+- Leaflet 1.9.4 and Chart.js 4.4.3 are served from `dashboard/vendor/`;
+  the page made **zero** requests to `unpkg.com` or `cdn.jsdelivr.net`.
+- With the keyed Voyager URL loaded from `.env`, the browser requested
+  **8 keyed raster tiles**, all HTTP 200, at 256×256; `#map` measured 404 px;
+  4 pins rendered; console errors: **0**.
+- Degradation check: an iframe with the Leaflet `<script>` removed produced
+  **0 uncaught errors**, showed `map unavailable — local map library missing`,
+  and the live ticker still updated.
+
 ## Tests
 
 `tests/test_api.py::TestDashboard` asserts that the page contains the map panel,
-that the stylesheet sizes `#map`, that dashboard assets are revalidated, and that
+that the stylesheet sizes `#map`, that dashboard assets are revalidated, that
+Leaflet/Chart.js are vendored (not CDN) and the init is guarded, and that
 `/dashboard-config` reads YAML, prefers environment variables, rejects a
 non-`http(s)` URL and clamps `tile_max_zoom`. Visual rendering is not covered by
 pytest.

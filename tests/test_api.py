@@ -240,6 +240,27 @@ class TestDashboard:
             assert r.status_code == 200, path
             assert "no-cache" in r.headers.get("cache-control", ""), path
 
+    def test_map_libs_are_vendored_not_cdn(self, client):
+        """A blocked CDN must not be able to take the dashboard down.
+
+        Leaflet/Chart.js are served from the app itself, and app.js guards the
+        map/chart init so a missing library only degrades those panels.
+        """
+        page = client.get("/").text
+        assert "vendor/leaflet/leaflet.js" in page
+        assert "vendor/leaflet/leaflet.css" in page
+        assert "vendor/chart.umd.min.js" in page
+        assert "unpkg.com" not in page
+        assert "cdn.jsdelivr.net" not in page
+
+        for path in ("/vendor/leaflet/leaflet.js", "/vendor/leaflet/leaflet.css",
+                     "/vendor/chart.umd.min.js"):
+            assert client.get(path).status_code == 200, path
+
+        js = client.get("/app.js").text
+        assert "MAP_AVAILABLE" in js            # map init is guarded
+        assert 'typeof Chart === "undefined"' in js  # chart init is guarded
+
     def test_dashboard_config_defaults(self, client):
         c = client.get("/dashboard-config").json()
         assert c["tile_url"].startswith("https://")

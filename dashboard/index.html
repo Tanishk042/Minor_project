@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..800;1,6..96,400..800&family=Pinyon+Script&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="style.css"/>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css"/>
+<link rel="stylesheet" href="style.css?v=2"/>
 </head>
 <body>
 
@@ -360,8 +360,9 @@
 <!-- ============ TOASTS ============ -->
 <div class="toasts" id="toasts"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="app.js"></script>
+<!-- Leaflet and Chart.js are vendored so the dashboard works without a CDN. -->
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

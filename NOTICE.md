@@ -57,6 +57,18 @@ evaluation number in `reports/` states which source it came from.
 | m2cgen | MIT |
 | pytest | MIT |
 
+## Dashboard front-end libraries (vendored)
+
+| Library | Version | License | Source |
+|---|---|---|---|
+| Leaflet | 1.9.4 | BSD-2-Clause | <https://github.com/Leaflet/Leaflet> |
+| Chart.js | 4.4.3 | MIT | <https://github.com/chartjs/Chart.js> |
+
+Both are copied into `dashboard/vendor/` so the dashboard does not depend on a
+CDN. Their license headers are retained in the shipped files. Basemap tiles are
+served by CARTO under CARTO's and OpenStreetMap's terms; the dashboard
+attribution is configurable and must not be removed.
+
 ## Android libraries
 
 | Library | License |

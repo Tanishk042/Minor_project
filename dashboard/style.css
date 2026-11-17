@@ -375,6 +375,12 @@ a { color: inherit; text-decoration: none; }
 /* Leaflet needs an explicitly sized container; without this #map collapses
    to zero height and the tiles load invisibly. */
 #map { width: 100%; height: 100%; }
+.map-fallback {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+  color: var(--muted); font-size: 12px; letter-spacing: .04em;
+  text-transform: uppercase;
+}
 .map-foot { color: var(--muted); }
 
 /* leaflet restyle */

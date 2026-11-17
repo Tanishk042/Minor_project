@@ -143,34 +143,49 @@ const TILE_FALLBACK = {
   attribution: "&copy; OpenStreetMap &copy; CARTO",
   maxZoom: 19,
 };
-const map = L.map("map", {
-  zoomControl: false, attributionControl: true,
-  center: [12.9716, 77.5946], zoom: 15,
-});
-L.control.zoom({ position: "bottomleft" }).addTo(map);
-let tileLayer = L.tileLayer(TILE_FALLBACK.url, {
-  attribution: TILE_FALLBACK.attribution, maxZoom: TILE_FALLBACK.maxZoom,
-}).addTo(map);
+/* The map is optional: if Leaflet is missing the rest of the dashboard must
+   still run. Every map call below is guarded on `map` being non-null. */
+const MAP_AVAILABLE = typeof L !== "undefined" && !!document.getElementById("map");
+let map = null;
+let tileLayer = null;
 let mapFit = false;
 
-/* Basemap is configurable server-side (configs/default.yaml -> dashboard,
-   or FORESTEAR_TILE_URL / _ATTRIBUTION / _MAX_ZOOM). The fallback layer is
-   already drawn, so a failed fetch leaves the map working. */
-fetch("/dashboard-config", { cache: "no-store" })
-  .then((r) => (r.ok ? r.json() : null))
-  .then((c) => {
-    if (!c || !c.tile_url || c.tile_url === TILE_FALLBACK.url) return;
-    map.removeLayer(tileLayer);
-    tileLayer = L.tileLayer(c.tile_url, {
-      attribution: c.tile_attribution ?? TILE_FALLBACK.attribution,
-      maxZoom: c.tile_max_zoom || TILE_FALLBACK.maxZoom,
-    }).addTo(map);
-  })
-  .catch(() => { /* keep the fallback basemap */ });
+if (!MAP_AVAILABLE) {
+  const el = document.getElementById("map");
+  if (el) {
+    el.innerHTML =
+      '<div class="map-fallback">map unavailable — local map library missing</div>';
+  }
+} else {
+  map = L.map("map", {
+    zoomControl: false, attributionControl: true,
+    center: [12.9716, 77.5946], zoom: 15,
+  });
+  L.control.zoom({ position: "bottomleft" }).addTo(map);
+  tileLayer = L.tileLayer(TILE_FALLBACK.url, {
+    attribution: TILE_FALLBACK.attribution, maxZoom: TILE_FALLBACK.maxZoom,
+  }).addTo(map);
+
+  /* Basemap is configurable server-side (configs/default.yaml -> dashboard,
+     or FORESTEAR_TILE_URL / _ATTRIBUTION / _MAX_ZOOM). The fallback layer is
+     already drawn, so a failed fetch leaves the map working. */
+  fetch("/dashboard-config", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((c) => {
+      if (!c || !c.tile_url || c.tile_url === TILE_FALLBACK.url) return;
+      map.removeLayer(tileLayer);
+      tileLayer = L.tileLayer(c.tile_url, {
+        attribution: c.tile_attribution ?? TILE_FALLBACK.attribution,
+        maxZoom: c.tile_max_zoom || TILE_FALLBACK.maxZoom,
+      }).addTo(map);
+    })
+    .catch(() => { /* keep the fallback basemap */ });
+}
 
 function nodeMarkerId(nid) { return `nm-${nid}`; }
 
 function createNodeMarker(rec, nid) {
+  if (!map) return null;
   const icon = L.divIcon({
     className: "",
     html: `<div class="pin" id="${nodeMarkerId(nid)}">
@@ -197,12 +212,12 @@ function upsertNode(n) {
     state.order.push(n.node_id);
     if (hasCoords) createNodeMarker(rec, n.node_id);
     rebuildNodeSelect();   // populate dropdown + auto-select first node
-    if (hasCoords && !mapFit) { map.fitBounds(allNodeBounds().pad(0.25)); mapFit = true; }
+    if (hasCoords && map && !mapFit) { map.fitBounds(allNodeBounds().pad(0.25)); mapFit = true; }
   } else if (hasCoords && (n.lat !== rec.lat || n.lon !== rec.lon)) {
     rec.lat = n.lat; rec.lon = n.lon;
     if (rec.marker) rec.marker.setLatLng([n.lat, n.lon]);
     else createNodeMarker(rec, n.node_id);
-    if (!mapFit) { map.fitBounds(allNodeBounds().pad(0.25)); mapFit = true; }
+    if (map && !mapFit) { map.fitBounds(allNodeBounds().pad(0.25)); mapFit = true; }
   }
   if (n.status) rec.status = n.status;
   if (n.health) rec.health = n.health;
@@ -217,6 +232,7 @@ function upsertNode(n) {
 }
 
 function allNodeBounds() {
+  if (typeof L === "undefined") return null;
   const pts = state.order
     .map((id) => state.nodes[id])
     .filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lon))
@@ -225,6 +241,7 @@ function allNodeBounds() {
 }
 
 function alertPulse(lat, lon, sev) {
+  if (!map) return;
   const cls = sev === "CRITICAL" ? "" : (sev === "WARNING" ? "warn" : "info");
   const icon = L.divIcon({
     className: "",
@@ -239,6 +256,7 @@ function alertPulse(lat, lon, sev) {
 }
 
 function sourceEstimateCircle(est) {
+  if (!map) return;
   const c = L.circle([est.lat, est.lon], {
     radius: Math.max(est.radius_m || 60, 30),
     className: "estimate-path",
@@ -362,8 +380,9 @@ function renderHealth() {
   const g = $("#health-grid");
   g.innerHTML = "";
   const okN = state.order.filter((id) => state.nodes[id].status === "healthy").length;
-  $("#map-foot").textContent =
-    `${state.order.length} nodes · ${okN} healthy · ${new Date().toISOString().slice(11, 19)} UTC`;
+  $("#map-foot").textContent = MAP_AVAILABLE
+    ? `${state.order.length} nodes · ${okN} healthy · ${new Date().toISOString().slice(11, 19)} UTC`
+    : "map unavailable — local map library missing";
   for (const id of state.order) {
     const n = state.nodes[id];
     const h = n.health || {};
@@ -562,6 +581,17 @@ const PAL = {
   grid: "rgba(23,35,59,.08)", tick: "rgba(23,35,59,.55)", line: "rgba(23,35,59,.34)",
   cream: "#f3f3ec",
 };
+
+/* Charts are optional too: a missing Chart.js must not stop the live feed. */
+if (typeof Chart === "undefined") {
+  window.Chart = class {
+    constructor() { this.data = {}; this.options = {}; }
+    update() {} destroy() {}
+  };
+  Chart.defaults = { font: {}, color: "" };
+  Chart.register = () => {};
+}
+
 Chart.defaults.font.family = "'Archivo', sans-serif";
 Chart.defaults.font.size = 10;
 Chart.defaults.font.weight = "600";
