@@ -1,0 +1,58 @@
+../.venv/bin/python -m pytest tests/ -q
+........................................................................ [ 49%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../.venv/lib/python3.12/site-packages/starlette/testclient.py:45
+  /Users/tanishkbhadauriya/Desktop/MInor Project/.venv/lib/python3.12/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+backend/main.py:614
+  /Users/tanishkbhadauriya/Desktop/MInor Project/forestear/backend/main.py:614: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../.venv/lib/python3.12/site-packages/fastapi/applications.py:4573
+  /Users/tanishkbhadauriya/Desktop/MInor Project/.venv/lib/python3.12/site-packages/fastapi/applications.py:4573: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+tests/test_api.py: 12 warnings
+  /Users/tanishkbhadauriya/Desktop/MInor Project/forestear/backend/main.py:230: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    node.last_seen = dt.datetime.utcnow()
+
+tests/test_api.py: 15 warnings
+  /Users/tanishkbhadauriya/Desktop/MInor Project/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:3624: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
+
+tests/test_api.py::TestAuth::test_queries_are_public
+tests/test_api.py::TestIngest::test_event_creates_node
+tests/test_api.py::TestIngest::test_heartbeat_updates_node
+tests/test_api.py::TestIngest::test_heartbeat_latlon_recorded
+  /Users/tanishkbhadauriya/Desktop/MInor Project/forestear/backend/main.py:386: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_api.py::TestIngest::test_heartbeat_updates_node
+tests/test_api.py::TestIngest::test_heartbeat_latlon_recorded
+  /Users/tanishkbhadauriya/Desktop/MInor Project/forestear/backend/main.py:351: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    node.last_seen = dt.datetime.utcnow()
+
+tests/test_api.py::TestIngest::test_heartbeat_updates_node
+tests/test_api.py::TestIngest::test_heartbeat_latlon_recorded
+  /Users/tanishkbhadauriya/Desktop/MInor Project/forestear/backend/main.py:363: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "ts": dt.datetime.utcnow().isoformat()})
+
+tests/test_api.py::TestIngest::test_biodiversity
+  /Users/tanishkbhadauriya/Desktop/MInor Project/forestear/backend/main.py:460: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    since = dt.datetime.utcnow() - dt.timedelta(hours=hours)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+145 passed, 39 warnings in 16.42s

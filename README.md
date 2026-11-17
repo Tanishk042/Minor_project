@@ -54,7 +54,7 @@ cp .env.example .env  # optional: local backend token, CARTO key, Telegram creds
 make security-check # verify no secrets are tracked (see docs/security.md)
 make backend        # FastAPI + dashboard at http://127.0.0.1:8000
 make demo           # 4 virtual forest nodes -> backend (needs `make train`)
-make test           # pytest suite (143 tests)
+make test           # pytest suite (145 tests)
 ```
 
 `make data` needs ~2 GB and a few minutes (parallel downloads, resumable).
@@ -105,6 +105,8 @@ available (synthetic generator fallback). Ground truth CSV is written to
   (false alarms per node-day)
 - `summary.md` — every number above, generated **only** from actual
   predictions made by this script on the held-out test split
+- `model_quality/comparison.md` — measured test of removing M6 from M9;
+  the variant was **not adopted** because it did not improve overall
 
 Fold discipline: ESC-50 folds 1-3/4/5 → train/val/test; UrbanSound8K
 1-6/7/8-10; FSD50K dev(train/val)/eval; synthetic 80/10/10 by index hash.

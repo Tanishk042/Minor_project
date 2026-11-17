@@ -9,7 +9,9 @@
       "human": 1608,
       "benign": 2688
     },
-    "note": "all metrics measured on the held-out test split"
+    "note": "all metrics measured on the held-out test split",
+    "model_variant": "deployed",
+    "ignore_m6_inputs": false
   },
   "m9_fusion_calibrated": {
     "per_class": {

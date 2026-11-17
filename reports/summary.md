@@ -1,6 +1,8 @@
 # ForestEar evaluation summary
 
-Generated 2026-11-12 11:19:24 — all numbers measured by `scripts/evaluate.py` on the held-out **test** split (6612 windows; {'chainsaw': 152, 'gunshot': 472, 'vehicle': 1692, 'human': 1608, 'benign': 2688}).
+Generated 2026-11-17 21:08:45 — all numbers measured by `scripts/evaluate.py` on the held-out **test** split (6612 windows; {'chainsaw': 152, 'gunshot': 472, 'vehicle': 1692, 'human': 1608, 'benign': 2688}).
+
+Model variant: **deployed**; M6 inputs ignored by M9: **False**.
 
 ## M9 ensemble vs baselines (macro F1, test)
 
@@ -20,6 +22,7 @@ Generated 2026-11-12 11:19:24 — all numbers measured by `scripts/evaluate.py` 
 | no_m1_scores | 0.8142 |
 | no_temporal_context | 0.6657 |
 | no_handcrafted | 0.8121 |
+| no_m6 | 0.8173 |
 | no_calibration | 0.8189 |
 
 ## Per-model detection (AP / AUROC)
@@ -48,7 +51,7 @@ Generated 2026-11-12 11:19:24 — all numbers measured by `scripts/evaluate.py` 
 
 - alerts fired: {'human': 284, 'vehicle': 418, 'gunshot': 120, 'chainsaw': 42}
 - precision per class: {'human': 0.8838, 'vehicle': 0.8804, 'gunshot': 0.8917, 'chainsaw': 0.7857}
-- recall per class: {'vehicle': 0.2175, 'gunshot': 0.2267, 'human': 0.1561, 'chainsaw': 0.2171}
+- recall per class: {'human': 0.1561, 'vehicle': 0.2175, 'gunshot': 0.2267, 'chainsaw': 0.2171}
 - weather veto: 0/1 suppressions on weather windows; 0 false vetoes on true gunshot windows
 - false alarms (threat classes, window-level): 105 in 0.9 h of replayed listening (2744.1 per node-day; stress stream — see decision_sim.json)
 

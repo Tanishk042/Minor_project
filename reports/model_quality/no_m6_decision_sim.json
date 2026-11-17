@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "note": "replay of test windows through the DEPLOYED decision layer (k-of-n persistence, cooldowns, weather veto); window-level attribution: an alert counts correct if the window's true class matches the alert class",
+    "false_alarm_metric": "threat-class alerts (chainsaw/gunshot/vehicle/human) whose window class differs; anomaly INFO alerts excluded from the rate and reported per class",
+    "node_day_note": "replay clock = one hop per window; the test split class mix is a stress stream, not typical forest ambience, so per-node-day is an extrapolation of THAT mix"
+  },
+  "alerts_fired": {
+    "human": 280,
+    "vehicle": 422,
+    "gunshot": 122,
+    "chainsaw": 41
+  },
+  "correct_alerts": {
+    "vehicle": 368,
+    "human": 245,
+    "chainsaw": 33,
+    "gunshot": 108
+  },
+  "false_alerts_per_class": {
+    "human": 35,
+    "vehicle": 54,
+    "gunshot": 14,
+    "chainsaw": 8
+  },
+  "alert_precision_per_class": {
+    "human": 0.875,
+    "vehicle": 0.872,
+    "gunshot": 0.8852,
+    "chainsaw": 0.8049
+  },
+  "alert_recall_per_class": {
+    "human": 0.1524,
+    "vehicle": 0.2175,
+    "chainsaw": 0.2171,
+    "gunshot": 0.2288
+  },
+  "alerts_on_benign_or_weather_windows": {
+    "human": 28,
+    "vehicle": 30,
+    "chainsaw": 2,
+    "gunshot": 9
+  },
+  "false_alarm_rate": {
+    "sim_hours": 0.92,
+    "node_days": 0.0383,
+    "threat_false_alerts": 111,
+    "false_alarms_per_node_day": 2900.91
+  },
+  "weather_veto": {
+    "total_suppressions": 1,
+    "on_weather_windows": 0,
+    "false_vetos_on_true_gunshot": 1,
+    "gunshot_windows_total": 472
+  }
+}

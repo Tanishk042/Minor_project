@@ -29,9 +29,9 @@
     "chainsaw": 0.7857
   },
   "alert_recall_per_class": {
+    "human": 0.1561,
     "vehicle": 0.2175,
     "gunshot": 0.2267,
-    "human": 0.1561,
     "chainsaw": 0.2171
   },
   "alerts_on_benign_or_weather_windows": {

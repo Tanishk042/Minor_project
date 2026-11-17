@@ -76,6 +76,9 @@ Common conventions for all trained models:
   heads don't know; escalates to INFO only (2-of-3 windows, loud > 35 dB).
 - **Limitations**: open-set by construction — unusual benign sounds also
   trip it; that is the point, and it is documented as such.
+- **Measured quality**: AUROC 0.482 (below chance) on the held-out split.
+  Masking its four M9 slots was retrained and evaluated but **not adopted**;
+  see `reports/model_quality/comparison.md`.
 
 ## M8 — BirdNET 2.4 INT8 (`models_store/m8_birdnet/`)
 
@@ -110,7 +113,9 @@ Common conventions for all trained models:
 
 M9 retrained with feature groups masked (embeddings-derived, weather,
 anomaly, handcrafted, temporal context) to expose each group's
-contribution to macro-F1. Reported as measured, not assumed.
+contribution to macro-F1. The `no_m6` row uses the same 47-slot contract with
+M6's four indices (19, 39, 40, 41) set to zero; the separately retrained
+variant was rejected as not overall better. Reported as measured, not assumed.
 
 ## Decision layer (not a model, but the system output)
 

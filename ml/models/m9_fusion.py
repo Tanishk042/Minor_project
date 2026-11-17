@@ -45,6 +45,31 @@ OFFSET = {
     "hour": N_M1_SCORES + 15 + 6 * 3,  # 2
 }
 N_FEATURES = OFFSET["hour"] + 2
+
+# M6 enters M9 in four places: its direct z-score and mean/max/slope of the
+# z-score over the last five windows.  Keep them in one place so training,
+# ablations and export cannot drift apart.  These indices are part of the
+# 47-feature contract; masking them does NOT change the vector length.
+M6_TEMPORAL_START = OFFSET["temporal"] + TEMPORAL_MODELS.index("m6") * 3
+M6_FEATURE_INDICES = np.array(
+    [OFFSET["m6"], M6_TEMPORAL_START, M6_TEMPORAL_START + 1,
+     M6_TEMPORAL_START + 2],
+    dtype=int,
+)
+
+
+def zero_m6_features(X: np.ndarray, *, copy: bool = True) -> np.ndarray:
+    """Return X with the four M6-derived M9 slots set to zero.
+
+    The 47-feature phone contract is preserved: downstream models still see
+    the same shape, but a model trained with this mask cannot learn from the
+    below-chance M6 anomaly score.  Used by both M9 retraining and evaluation.
+    """
+    out = np.array(X, copy=copy)
+    out[:, M6_FEATURE_INDICES] = 0.0
+    return out
+
+
 FEATURE_ORDER = (
     [f"m1_{i}" for i in range(N_M1_SCORES)]
     + ["m2", "m3", "m4"]

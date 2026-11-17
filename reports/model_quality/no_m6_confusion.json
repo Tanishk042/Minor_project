@@ -1,0 +1,98 @@
+{
+  "classes": [
+    "chainsaw",
+    "gunshot",
+    "vehicle",
+    "human",
+    "benign"
+  ],
+  "matrix_rows_true_cols_pred": [
+    [
+      105,
+      3,
+      28,
+      3,
+      13
+    ],
+    [
+      0,
+      403,
+      1,
+      7,
+      61
+    ],
+    [
+      8,
+      15,
+      1464,
+      50,
+      155
+    ],
+    [
+      1,
+      1,
+      88,
+      1157,
+      361
+    ],
+    [
+      3,
+      24,
+      146,
+      247,
+      2268
+    ]
+  ],
+  "metrics": {
+    "per_class": {
+      "chainsaw": {
+        "precision": 0.8974,
+        "recall": 0.6908,
+        "f1": 0.7807,
+        "support": 152,
+        "tp": 105,
+        "fp": 12,
+        "fn": 47
+      },
+      "gunshot": {
+        "precision": 0.9036,
+        "recall": 0.8538,
+        "f1": 0.878,
+        "support": 472,
+        "tp": 403,
+        "fp": 43,
+        "fn": 69
+      },
+      "vehicle": {
+        "precision": 0.8477,
+        "recall": 0.8652,
+        "f1": 0.8564,
+        "support": 1692,
+        "tp": 1464,
+        "fp": 263,
+        "fn": 228
+      },
+      "human": {
+        "precision": 0.7903,
+        "recall": 0.7195,
+        "f1": 0.7533,
+        "support": 1608,
+        "tp": 1157,
+        "fp": 307,
+        "fn": 451
+      },
+      "benign": {
+        "precision": 0.7936,
+        "recall": 0.8438,
+        "f1": 0.8179,
+        "support": 2688,
+        "tp": 2268,
+        "fp": 590,
+        "fn": 420
+      }
+    },
+    "accuracy": 0.8162,
+    "macro_f1": 0.8173,
+    "n": 6612
+  }
+}

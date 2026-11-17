@@ -17,8 +17,10 @@ Honesty rules:
 """
 from __future__ import annotations
 
+import argparse
 import json
 import logging
+import re
 import sys
 import time
 from collections import defaultdict
@@ -31,8 +33,9 @@ sys.path.insert(0, str(REPO))
 
 from common.config import load_config, models_dir, reports_dir  # noqa: E402
 from common.logging_setup import setup_logging  # noqa: E402
-from ml.models.m9_fusion import (M9LightGBM, N_FEATURES, OFFSET,  # noqa: E402
-                                 TEMPORAL_MODELS)
+from ml.models.m9_fusion import (M6_FEATURE_INDICES, M9LightGBM, N_FEATURES,
+                                 OFFSET, TEMPORAL_MODELS,  # noqa: E402
+                                 zero_m6_features)
 from ml.train_m9_fusion import _oof_features  # noqa: E402
 from ml.window_cache import WindowCache  # noqa: E402
 
@@ -134,13 +137,35 @@ def ece_brier(probs: np.ndarray, y_true: np.ndarray, n_bins: int = 10):
 
 # ------------------------------------------------------------------ main
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--m9-variant", default="",
+                    help="artifact suffix to evaluate, e.g. _no_m6")
+    ap.add_argument("--report-suffix", default=None,
+                    help="suffix for generated report filenames; defaults to "
+                         "--m9-variant so comparisons do not overwrite")
+    ap.add_argument("--ignore-m6-inputs", action="store_true",
+                    help="zero M6 slots before M9 inference; M6 scores remain "
+                         "available to the INFO anomaly decision simulation")
+    args = ap.parse_args()
+    variant = args.m9_variant
+    report_suffix = (args.report_suffix if args.report_suffix is not None
+                     else variant)
+    for name, value in (("--m9-variant", variant),
+                        ("--report-suffix", report_suffix)):
+        if value and not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+            ap.error(f"{name} may only contain letters, digits, _ or -")
+
+    def report_file(name: str, ext: str = "json") -> Path:
+        return reports_dir() / f"{name}{report_suffix}.{ext}"
+
     setup_logging()
     t_start = time.time()
     cfg = load_config()
     cache = WindowCache()
 
     log.info("building TEST features (M2-M7 + temporal context)...")
-    Xte, yte = _oof_features(cache, "test")
+    Xte_raw, yte = _oof_features(cache, "test")
+    Xte = zero_m6_features(Xte_raw) if args.ignore_m6_inputs else Xte_raw
     idx = cache.subset("test")
     labels = np.array([class_of(c) for c in cache.y[idx]])
     origins = cache.origin[idx]
@@ -149,7 +174,7 @@ def main() -> int:
     log.info("test windows: %d (classes %s)", n, np.bincount(yte))
 
     # ------------------------------------------------------------ M9
-    m9 = M9LightGBM.load(models_dir("m9_fusion") / "m9_lgbm.pkl")
+    m9 = M9LightGBM.load(models_dir("m9_fusion") / f"m9_lgbm{variant}.pkl")
     p9 = m9.predict_proba(Xte)
     pred9 = p9.argmax(axis=1)
 
@@ -160,7 +185,7 @@ def main() -> int:
 
     # ------------------------------------------------------------ M9 MLP alt
     mlp_metrics = None
-    mlp_path = models_dir("m9_fusion") / "m9_mlp.keras"
+    mlp_path = models_dir("m9_fusion") / f"m9_mlp{variant}.keras"
     if mlp_path.exists():
         import tensorflow as tf
         mlp = tf.keras.models.load_model(mlp_path, compile=False)
@@ -213,12 +238,12 @@ def main() -> int:
     # ------------------------------------------------------------ per-model (M2-M7)
     # recompute the per-window head outputs from the M9 feature vector
     off = OFFSET
-    p2 = Xte[:, off["m2"]]
-    p3 = Xte[:, off["m3"]]
-    p4 = Xte[:, off["m4"]]
-    p5 = Xte[:, off["m5"]:off["m5"] + 4]
-    z6 = Xte[:, off["m6"]]
-    p7 = Xte[:, off["m7"]]
+    p2 = Xte_raw[:, off["m2"]]
+    p3 = Xte_raw[:, off["m3"]]
+    p4 = Xte_raw[:, off["m4"]]
+    p5 = Xte_raw[:, off["m5"]:off["m5"] + 4]
+    z6 = Xte_raw[:, off["m6"]]   # always keep raw M6 for the INFO anomaly path
+    p7 = Xte_raw[:, off["m7"]]
 
     def binary_eval(score, cls):
         yt = (yte == CLASSES.index(cls)).astype(int)
@@ -279,15 +304,17 @@ def main() -> int:
         "threshold": float(cfg["decision"]["thresholds"]["anomaly"]),
         "n": n}
 
-    (reports_dir() / "metrics_per_model.json").write_text(json.dumps(
+    report_file("metrics_per_model").write_text(json.dumps(
         {"_meta": {"split": "test", "n_windows": n,
                    "class_counts": {c: int((yte == j).sum())
                                     for j, c in enumerate(CLASSES)},
-                   "note": "all metrics measured on the held-out test split"},
+                   "note": "all metrics measured on the held-out test split",
+                   "model_variant": variant or "deployed",
+                   "ignore_m6_inputs": bool(args.ignore_m6_inputs)},
          **per_model}, indent=2))
 
     # ------------------------------------------------------------ confusion
-    (reports_dir() / "confusion.json").write_text(json.dumps({
+    report_file("confusion").write_text(json.dumps({
         "classes": CLASSES,
         "matrix_rows_true_cols_pred": conf_mat.tolist(),
         "metrics": m9_metrics,
@@ -296,7 +323,8 @@ def main() -> int:
     # ------------------------------------------------------------ ablations
     log.info("ablations: retraining LightGBM with masked feature groups...")
     import lightgbm as lgb
-    Xva, yva = _oof_features(cache, "val")
+    Xva_raw, yva = _oof_features(cache, "val")
+    Xva = Xva_raw
     seed = cfg["training"]["seed"]
 
     def train_eval_lgbm(mask_train, mask_test):
@@ -307,8 +335,8 @@ def main() -> int:
         from sklearn.isotonic import IsotonicRegression
         from sklearn.model_selection import train_test_split
 
-        Xa = Xva.copy()
-        Xb = Xte.copy()
+        Xa = Xva_raw.copy()
+        Xb = Xte_raw.copy()
         if mask_train is not None:
             Xa[:, mask_train] = 0.0
         if mask_test is not None:
@@ -337,6 +365,7 @@ def main() -> int:
         np.arange(off["temporal"], off["temporal"] + 18), None)
     ablations["no_handcrafted"] = train_eval_lgbm(
         np.arange(off["handcrafted"], off["handcrafted"] + 6), None)
+    ablations["no_m6"] = train_eval_lgbm(M6_FEATURE_INDICES, None)
     # uncalibrated full model (raw LightGBM probabilities, no isotonic)
     raw_full = np.asarray(m9.model.predict_proba(Xte.astype(np.float64)),
                           dtype=np.float64)
@@ -346,7 +375,7 @@ def main() -> int:
     ablations["m3_chainsaw_only"] = binary_eval(p3, "chainsaw")
     ablations["m2_gunshot_only"] = binary_eval(p2, "gunshot")
 
-    (reports_dir() / "ablation.json").write_text(json.dumps({
+    report_file("ablation").write_text(json.dumps({
         "_meta": {"method": "LightGBM retrained on OOF(val) features with the "
                   "feature group zeroed (train AND test), following the "
                   "deployed protocol (75/25 stratified split, isotonic "
@@ -376,7 +405,7 @@ def main() -> int:
                                   for c in CLASSES
                                   if r["per_class"][c]["support"] > 0}
         robust[src] = r
-    (reports_dir() / "robustness.json").write_text(json.dumps({
+    report_file("robustness").write_text(json.dumps({
         "_meta": {"note": "per-source breakdown of the deployed M9 on the same "
                   "test split; sources derived from origin_id prefix"},
         **robust}, indent=2))
@@ -387,7 +416,7 @@ def main() -> int:
                           dtype=np.float64)
     s = raw_full.sum(axis=1, keepdims=True); s[s == 0] = 1
     ece_u, brier_u, _ = ece_brier(raw_full / s, yte)
-    (reports_dir() / "calibration.json").write_text(json.dumps({
+    report_file("calibration").write_text(json.dumps({
         "calibrated": {"ece": round(ece_c, 4), "brier": round(brier_c, 4)},
         "uncalibrated": {"ece": round(ece_u, 4), "brier": round(brier_u, 4)},
         "reliability_curve_calibrated": rel,
@@ -458,7 +487,7 @@ def main() -> int:
     node_days = sim_hours / 24.0
     fa_per_node_day = round(threat_false / node_days, 2) if node_days > 0 else None
 
-    (reports_dir() / "decision_sim.json").write_text(json.dumps({
+    report_file("decision_sim").write_text(json.dumps({
         "_meta": {"note": "replay of test windows through the DEPLOYED decision "
                   "layer (k-of-n persistence, cooldowns, weather veto); "
                   "window-level attribution: an alert counts correct if the "
@@ -494,9 +523,11 @@ def main() -> int:
           f"**test** split ({n} windows; "
           f"{dict(zip(CLASSES, [int((yte == j).sum()) for j in range(5)]))}).",
           "",
+          f"Model variant: **{variant or 'deployed'}**; M6 inputs ignored by "
+          f"M9: **{args.ignore_m6_inputs}**.", "",
           "## M9 ensemble vs baselines (macro F1, test)", "",
           "| variant | macro F1 | accuracy |", "|---|---|---|"]
-    rows = [("M9 fusion (calibrated, deployed)", m9_metrics),
+    rows = [(f"M9 fusion (calibrated, {variant or 'deployed'})", m9_metrics),
             ("M9 MLP alternative", mlp_metrics),
             ("YAMNet-only baseline", base_m1),
             ("handcrafted LR baseline", base_lr),
@@ -506,7 +537,7 @@ def main() -> int:
             md.append(f"| {name} | {r['macro_f1']:.4f} | {r['accuracy']:.4f} |")
     md += ["", "## Ablations (macro F1)", "", "| ablation | macro F1 |", "|---|---|"]
     for k in ("full_ensemble", "no_m1_scores", "no_temporal_context",
-              "no_handcrafted", "no_calibration"):
+              "no_handcrafted", "no_m6", "no_calibration"):
         if k in ablations:
             md.append(f"| {k} | {ablations[k].get('macro_f1', ablations[k].get('ap'))} |")
     md += ["", "## Per-model detection (AP / AUROC)", "",
@@ -534,7 +565,7 @@ def main() -> int:
            f"({fa_per_node_day} per node-day; stress stream — see "
            f"decision_sim.json)",
            "", "Full JSON provenance: `reports/*.json`.", ""]
-    (reports_dir() / "summary.md").write_text("\n".join(md))
+    report_file("summary", "md").write_text("\n".join(md))
 
     log.info("evaluation done in %.1f s -> reports/", time.time() - t_start)
     return 0
