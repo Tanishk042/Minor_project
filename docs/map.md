@@ -62,6 +62,34 @@ failed request leaves a working map.
 `/dashboard-config` is public because the dashboard is public. Never put a
 secret in `tile_url`; a key placed there is visible to every visitor.
 
+## Using a CARTO API key
+
+Keep the key out of tracked files. Put it in `forestear/.env` (gitignored) and
+start the backend with `make backend`, which sources that file. Docker Compose
+reads the same `.env` automatically.
+
+```bash
+# forestear/.env  (never commit; see .env.example)
+FORESTEAR_TILE_URL="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=YOUR_KEY"
+FORESTEAR_TILE_ATTRIBUTION="&copy; OpenStreetMap &copy; CARTO"
+FORESTEAR_TILE_MAX_ZOOM=19
+```
+
+The **raster** Voyager URL works with the current Leaflet map — no code change.
+Verified on this checkout: 9 tiles loaded at 256×256, all HTTP 200, no console
+errors.
+
+The **vector** style URL
+(`https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json?key=...`)
+returns HTTP 200, but it is a MapLibre/Mapbox style document, not a raster tile
+template. Using it means replacing Leaflet with MapLibre GL JS and porting the
+pins, pulses and estimate circles to that renderer. That is **not implemented**
+here.
+
+A key used by a browser map is always visible to the browser. Restrict it in
+the CARTO dashboard (allowed referrers/domains, usage limits) and treat a key
+pasted into a chat, ticket or screenshot as compromised — rotate it.
+
 ## Offline / no-internet behaviour
 
 The basemap is a third-party tile service. Without internet:

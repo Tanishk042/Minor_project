@@ -16,6 +16,11 @@ __pycache__/
 .venv/
 .DS_Store
 
+# local secrets (backend token, CARTO key, Telegram credentials)
+.env
+.env.*
+!.env.example
+
 # scratch
 *.log
 nohup.out

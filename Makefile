@@ -50,7 +50,7 @@ eval: ## full evaluation -> reports/ (per-model, ensemble, ablations)
 
 # ------------------------------------------------------------- runtime
 backend: ## run the FastAPI backend + dashboard (http://127.0.0.1:8000)
-	$(PY) -m backend.main --port 8000
+	@set -a; [ -f .env ] && . ./.env; set +a; $(PY) -m backend.main --port 8000
 
 smoke: ## push synthetic traffic into a running backend (dashboard check)
 	$(PY) scripts/smoke_ingest.py

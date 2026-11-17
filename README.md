@@ -50,9 +50,10 @@ make train          # M2..M7, then M9 fusion (OOF stacking + calibration)
 make export         # TFLite export + parity check + edge latency benchmark
 make eval           # full evaluation -> reports/ (JSON + summary.md)
 
+cp .env.example .env  # optional: local backend token, CARTO key, Telegram creds
 make backend        # FastAPI + dashboard at http://127.0.0.1:8000
 make demo           # 4 virtual forest nodes -> backend (needs `make train`)
-make test           # pytest suite (133 tests)
+make test           # pytest suite (142 tests)
 ```
 
 `make data` needs ~2 GB and a few minutes (parallel downloads, resumable).
