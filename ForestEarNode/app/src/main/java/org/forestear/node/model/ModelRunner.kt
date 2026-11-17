@@ -13,6 +13,9 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import kotlin.math.roundToInt
 
+/** 0.975 s at 16 kHz, matching `ml/features.py` (`wav[:15600]`). */
+const val YAMNET_SAMPLES = 15600
+
 enum class DelegateKind {
     CPU_XNNPACK,
     GPU;
@@ -211,9 +214,18 @@ class YamnetModel(
         }
         delegate = d
         interpreter = Interpreter(TfliteModel.mapAsset(context, assetPath), options)
+        // The official YAMNet TFLite build declares a *dynamic* waveform input:
+        // shape [1] with signature [-1]. The declared element count is therefore
+        // 1, not the 0.975 s window YAMNet analyses. Python
+        // (ml/features.py) resizes the input to 15600 samples before invoking;
+        // without the same resize the model sees a single sample and every
+        // embedding-based head (M3/M4/M7) and M1's scores are meaningless.
+        val declaredInput = interpreter.getInputTensor(0).shape().fold(1) { acc, v -> acc * v }
+        if (declaredInput != YAMNET_SAMPLES) {
+            interpreter.resizeInput(0, intArrayOf(YAMNET_SAMPLES))
+        }
+        inputElements = YAMNET_SAMPLES
         interpreter.allocateTensors()
-        val inp = interpreter.getInputTensor(0)
-        inputElements = inp.shape().fold(1) { acc, v -> acc * v }
         var s = -1
         var e = -1
         for (i in 0 until interpreter.outputTensorCount) {

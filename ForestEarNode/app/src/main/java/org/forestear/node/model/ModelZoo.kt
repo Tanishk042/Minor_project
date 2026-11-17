@@ -86,7 +86,6 @@ class ModelZoo(
     private val selectedNames = config.features.selectedClasses
     private val selectedIndices = config.features.selectedIndices
     private val m7ExtraNames = config.features.m7ExtraClasses
-    private val m7ExtraIndices = config.features.m7ExtraIndices
     private val m5Classes = config.features.m5Classes
     private val m7Norm = assets.norms["m7_human"]
     private val m3Norm = assets.norms["m3_chainsaw"]
@@ -186,8 +185,11 @@ class ModelZoo(
             val m7Input = FloatArray(1024 + m7ExtraNames.size)
             System.arraycopy(embedding, 0, m7Input, 0, 1024)
             for (i in m7ExtraNames.indices) {
-                val idx = m7ExtraIndices[i]
-                m7Input[1024 + i] = if (idx in scores.indices) scores[idx] else 0f
+                // Training (ml/train_m2_m7.py) and the Python edge path pad M7
+                // extras that are absent from yamnet_selected_classes with 0.
+                // Reading the full 521-way scores here feeds the head values it
+                // never saw during training and breaks golden-vector parity.
+                m7Input[1024 + i] = selected[m7ExtraNames[i]] ?: 0f
             }
             m7.run(m7Norm?.apply(m7Input) ?: m7Input)[0]
         } else 0f

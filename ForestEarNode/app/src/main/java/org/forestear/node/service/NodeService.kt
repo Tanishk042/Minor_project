@@ -82,6 +82,8 @@ class NodeService : Service(), AudioCapture.Listener {
 
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
+    /** Best-effort sends (heartbeat, system events) must never block the main thread. */
+    private val netExecutor = Executors.newSingleThreadExecutor()
     private val running = AtomicBoolean(false)
     private val processing = AtomicBoolean(false)
     private val pipelineStarted = AtomicBoolean(false)
@@ -387,6 +389,7 @@ class NodeService : Service(), AudioCapture.Listener {
             NodeState.update { it.copy(running = false, starting = false) }
         }
         executor.shutdownNow()
+        netExecutor.shutdownNow()
         val restarts = if (::settings.isInitialized) settings.restartCount else -1
         FLog.i("service destroyed (restarts=$restarts)")
         super.onDestroy()
@@ -1234,7 +1237,10 @@ class NodeService : Service(), AudioCapture.Listener {
                 .put("m9", rounded(result.m9))
                 .put("rms_db", round(result.rmsDb, 1))
         } ?: JSONObject()
-        transport.sendHeartbeat(health, scores, lat, lon)
+        netExecutor.execute {
+            runCatching { transport.sendHeartbeat(health, scores, lat, lon) }
+                .onFailure { FLog.e("heartbeat send failed", it) }
+        }
 
         notification.update(
             NotificationHelper.SERVICE_ID,
@@ -1263,7 +1269,10 @@ class NodeService : Service(), AudioCapture.Listener {
             FLog.w("governor ${alert.kind}: ${alert.message}")
             notification.warning("ForestEar ${alert.severity.lowercase()}", alert.message)
             val (lat, lon) = location.current()
-            transport.sendSystemEvent(alert.kind, alert.severity, alert.message, lat, lon)
+            netExecutor.execute {
+                runCatching { transport.sendSystemEvent(alert.kind, alert.severity, alert.message, lat, lon) }
+                    .onFailure { FLog.e("governor alert send failed", it) }
+            }
         }
         if (previous?.level != gov.level) {
             FLog.i("governor ${previous?.level} -> ${gov.level} (${gov.reason})")
@@ -1287,7 +1296,10 @@ class NodeService : Service(), AudioCapture.Listener {
 
     private fun sendSystem(cls: String, severity: String, message: String) {
         val (lat, lon) = location.current()
-        transport.sendSystemEvent(cls, severity, message, lat, lon)
+        netExecutor.execute {
+            runCatching { transport.sendSystemEvent(cls, severity, message, lat, lon) }
+                .onFailure { FLog.e("system event send failed", it) }
+        }
     }
 
     // ------------------------------------------------------------ helpers

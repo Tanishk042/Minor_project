@@ -49,7 +49,9 @@ data class TierPlan(
         .put("stream_only", streamOnly)
         .put("gpu_models", org.json.JSONArray(gpuModels.sorted()))
         .put("reason", reason)
-        .put("measured_pipeline_ms", measuredPipelineMs)
+        // org.json rejects NaN, so an unmeasured benchmark must be null.
+        .put("measured_pipeline_ms",
+            if (measuredPipelineMs.isFinite()) measuredPipelineMs else org.json.JSONObject.NULL)
         .put("budget_ms", budgetMs)
 
     companion object {

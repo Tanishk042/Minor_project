@@ -39,6 +39,18 @@ class PipelineParityTest {
                 val wav = Binary.floats(source.readBytes("golden/input_$name.f32"))
                 val r = zoo.process(wav, hour = pipeline.getDouble("hour"))
 
+                // YAMNet has a dynamic input shape; if it is not resized to
+                // 15600 samples, every score here collapses to noise and the
+                // embedding-based heads (M3/M4/M7) follow it.
+                val m1 = w.getJSONObject("m1_selected")
+                for (key in m1.keys()) {
+                    assertEquals(
+                        "$name m1/$key",
+                        m1.getDouble(key),
+                        (r.m1Scores[key] ?: -1f).toDouble(),
+                        1e-4,
+                    )
+                }
                 assertEquals("$name m2", w.getDouble("m2"), r.m2.toDouble(), 5e-3)
                 assertEquals("$name m3", w.getDouble("m3"), r.m3.toDouble(), 5e-3)
                 assertEquals("$name m4", w.getDouble("m4"), r.m4.toDouble(), 5e-3)

@@ -320,7 +320,12 @@ data class TelephonyCapability(
                 defaultSmsSubId = o.optInt("default_sms_sub_id", -1),
                 networkType = o.optString("network_type", "unknown"),
                 signalDbm = if (o.isNull("signal_dbm")) null else o.optInt("signal_dbm"),
-                operator = o.optString("operator", "").ifBlank { null },
+                // Android's org.json.optString() returns the literal "null"
+                // for JSONObject.NULL (newer desktop org.json returns the
+                // fallback). Without the isNull guard a missing operator
+                // silently becomes the string "null" on every save/load.
+                operator = if (o.isNull("operator")) null
+                else o.optString("operator", "").ifBlank { null },
                 phoneStateGranted = o.optBoolean("phone_state_granted", false),
             )
         }

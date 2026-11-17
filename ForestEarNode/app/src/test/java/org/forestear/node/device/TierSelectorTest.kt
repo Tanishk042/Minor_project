@@ -114,6 +114,19 @@ class TierSelectorTest {
     }
 
     @Test
+    fun unmeasuredPlanSerializesWithoutNaN() {
+        // Regression: a never-benchmarked phone produced measuredPipelineMs=NaN,
+        // and JSONObject.put(NaN) throws "Forbidden numeric value: NaN", which
+        // killed the whole pipeline at startup on a real handset.
+        val plan = select(measured = Double.NaN)
+        val json = plan.toJson()
+        assertTrue(json.isNull("measured_pipeline_ms"))
+        val restored = TierPlan.fromJson(json)
+        assertTrue(restored.measuredPipelineMs.isNaN())
+        assertEquals(PerfTier.C, restored.tier)
+    }
+
+    @Test
     fun tierPlanJsonDefaultsAreConservative() {
         val restored = TierPlan.fromJson(org.json.JSONObject())
         assertEquals(PerfTier.C, restored.tier)

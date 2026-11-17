@@ -16,6 +16,7 @@ import org.forestear.node.util.AndroidAssetSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,7 +66,14 @@ class DeviceAdaptationTest {
             val reloaded = DeviceProfileStore(context).load()
             assertNotNull(reloaded)
             assertEquals(mock, reloaded)
-            assertTrue(reloaded!!.missing.contains("telephony"))
+            // Android's org.json.optString() turns JSONObject.NULL into the
+            // literal "null" unless the isNull guard is present. This used to
+            // make the two profiles unequal while printing identically.
+            assertNull(reloaded!!.telephony.operator)
+            assertNull(reloaded.telephony.signalDbm)
+            assertNull(reloaded.battery.temperatureC)
+            assertNull(reloaded.battery.capacityMah)
+            assertTrue(reloaded.missing.contains("telephony"))
         } finally {
             if (original != null) store.save(original) else File(store.path()).delete()
         }
