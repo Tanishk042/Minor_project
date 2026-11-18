@@ -90,3 +90,47 @@ export, no phone asset replacement and no Android rerun were performed.
 
 All files are in `reports/model_quality/`. Numbers above were read directly
 from those generated files; nothing was estimated by hand.
+
+---
+
+# M5 probability calibration — measured, not adopted
+
+A separate investigation asked whether the weak M5 weather classifier could be
+improved without an expensive full CNN retrain. A fixed log-probability bias of
+`[-1.5, -2.0, -2.0, 0.0]` (rain/wind/thunder/quiet) was selected on the
+**validation split only** by coordinate descent, then applied **once** to the
+held-out test split.
+
+| Measure | Baseline | Calibrated |
+|---|---:|---:|
+| M5 macro-F1 (validation) | 0.6055 | 0.7061 |
+| M5 macro-F1 (held-out test) | 0.5761 | 0.6728 |
+
+The M5 gain is real and confirmed out of sample. It did **not** translate into
+a better deployed system:
+
+| Measure | Deployed M9 | Note |
+|---|---:|---|
+| Macro-F1 on raw M5 features | 0.8186 | deployed baseline |
+| Macro-F1 on calibrated M5 features | 0.8079 | same trained model; input distribution changed |
+| Accuracy on raw / calibrated | 0.8200 / 0.8091 | same trained model |
+| Macro-F1 after retraining M9 on calibrated features | 0.8199 | +0.0013 vs baseline |
+| Accuracy after retraining M9 on calibrated features | 0.8138 | -0.0062 vs baseline |
+
+M9 was trained on the raw M5 softmax values, so feeding it biased values
+creates a train/serve mismatch that costs ~1.1 points of macro-F1. Retraining M9
+to remove that mismatch is a wash at best (macro-F1 +0.0013, accuracy -0.0062).
+Applying the bias only to M5's reported/veto probability while leaving M9's
+inputs raw would require a matched dual path in both the Python agent and the
+Android app for a marginal result.
+
+**Decision: not adopted.** The deployed M5 model, M9 artifacts and Android
+assets are unchanged; M5 remains **0.5761** and M9 remains **0.8186** with
+**0 false weather vetoes on true gunshot windows**. The dense-M5 alternative was
+also rejected: its best validation macro-F1 was 0.4933 versus 0.6055 for the
+deployed CNN. A full M5 CNN retrain was not viable here: the original training
+run took 48,713.6 s (≈13.5 h).
+
+Evidence files: `m5_bias_calibration_val.json`, `m5_bias_test_confirmation.json`,
+`m5_dense_tuning_val.json`, `m5_calibration_m9_tradeoff.json` (all in this
+directory). They record the experiment; none changed a deployed artifact.

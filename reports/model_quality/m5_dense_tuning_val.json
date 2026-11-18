@@ -1,0 +1,81 @@
+{
+  "split": "val only; test split never used",
+  "grid": [
+    {
+      "factor": 1.0,
+      "weights": [
+        3.246,
+        3.283,
+        3.283,
+        0.324
+      ],
+      "best_val_macro_f1": 0.4789,
+      "best_epoch": 20,
+      "val_accuracy": 0.706,
+      "seconds": 31.2,
+      "per_class_f1": {
+        "rain": 0.4564,
+        "wind": 0.4156,
+        "thunder": 0.2284,
+        "quiet": 0.8151
+      }
+    },
+    {
+      "factor": 1.5,
+      "weights": [
+        4.869,
+        4.925,
+        4.925,
+        0.487
+      ],
+      "best_val_macro_f1": 0.4933,
+      "best_epoch": 14,
+      "val_accuracy": 0.7495,
+      "seconds": 1145.8,
+      "per_class_f1": {
+        "rain": 0.3887,
+        "wind": 0.4586,
+        "thunder": 0.2792,
+        "quiet": 0.8468
+      }
+    },
+    {
+      "factor": 2.0,
+      "weights": [
+        6.493,
+        6.566,
+        6.566,
+        0.649
+      ],
+      "best_val_macro_f1": 0.4688,
+      "best_epoch": 20,
+      "val_accuracy": 0.7069,
+      "seconds": 35.8,
+      "per_class_f1": {
+        "rain": 0.4391,
+        "wind": 0.401,
+        "thunder": 0.2146,
+        "quiet": 0.8206
+      }
+    },
+    {
+      "factor": 3.0,
+      "weights": [
+        9.739,
+        9.849,
+        9.849,
+        0.973
+      ],
+      "best_val_macro_f1": 0.4782,
+      "best_epoch": 20,
+      "val_accuracy": 0.7005,
+      "seconds": 29.7,
+      "per_class_f1": {
+        "rain": 0.4364,
+        "wind": 0.4454,
+        "thunder": 0.2186,
+        "quiet": 0.8124
+      }
+    }
+  ]
+}

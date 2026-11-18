@@ -1,0 +1,22 @@
+{
+  "test_macro_f1_baseline": 0.5761,
+  "test_macro_f1_calibrated": 0.6728,
+  "bias": [
+    -1.5,
+    -2.0,
+    -2.0,
+    0.0
+  ],
+  "per_class_baseline": {
+    "rain": 0.5217,
+    "wind": 0.3606,
+    "thunder": 0.4922,
+    "quiet": 0.9299
+  },
+  "per_class_calibrated": {
+    "rain": 0.5652,
+    "wind": 0.6139,
+    "thunder": 0.5455,
+    "quiet": 0.9666
+  }
+}

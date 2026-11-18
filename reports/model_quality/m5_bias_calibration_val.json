@@ -1,0 +1,17 @@
+{
+  "split": "val only; test split never used",
+  "baseline_val_macro_f1": 0.6055,
+  "calibrated_val_macro_f1": 0.7061,
+  "log_probability_bias": [
+    -1.5,
+    -2.0,
+    -2.0,
+    0.0
+  ],
+  "per_class_f1": {
+    "rain": 0.6262,
+    "wind": 0.6007,
+    "thunder": 0.6442,
+    "quiet": 0.9534
+  }
+}
