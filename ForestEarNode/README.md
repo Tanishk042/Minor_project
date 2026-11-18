@@ -357,11 +357,13 @@ python3 android/tools/generate_oem_docs.py
   `../device_evidence/compatibility_report_CPH2381.md` is the canonical
   phone-generated report. Other rows in `docs/supported_devices.md` are OEM
   guidance, not measurements.
-- **Recovery is mixed, not all PASS.** Force-kill and reboot are FAIL because
-  Android 14 blocks background microphone foreground-service restart; swipe-away
-  and screen-off are PASS; watchdog and microphone-theft paths are NOT RUN.
-- **Final 24 h soak is pending.** The run started 2026-11-17T09:26:46Z, but the
-  scheduled auto-stop job was cancelled and no final report has been pulled.
+- **Recovery is mixed, not all PASS.** Force-kill, watchdog and reboot are FAIL:
+  Android 14 blocks background microphone foreground-service restart, and the
+  5-minute watchdog did not bring the service back after force-stop. Swipe-away
+  and screen-off are PASS; microphone theft is PASS (10 s zero signal, DEGRADED,
+  restart after 30 s). See `../../device_evidence/recovery_paths_CPH2381.json`.
+- **Final 24 h soak is pending.** The 2026-11-17 run is invalid (power unplugged
+  after 1 h 29 m, no final report). A fresh run started 2026-11-18T15:57:24Z.
 - **Delivery and field accuracy are not verified.** SMS/Telegram real delivery,
   labelled field audio and real TDOA clock-offset correction remain open.
 - The golden synthetic gunshot window produces M2 **0.906** but M9 gunshot

@@ -12,12 +12,13 @@ capability is recorded as missing, never guessed.
 |---|---|---|---|---|---|
 | Signed release APK | **NOT RUN** | No keystore or passwords were supplied. Only the debug APK was built. | Create a keystore, fill `keystore.properties`, run `./scripts/build_release.sh`, then `apksigner verify`. See `release_build.md`. | Signed APK(s) plus `apksigner verify` output. | "Release APK ready for distribution." |
 | Emulator matrix (Android 8–15) | **NOT RUN** | No emulator package or system images are installed. | `./scripts/emulator_matrix.sh --install`, then run the matrix (`--full` for all instrumented tests). See `emulator_matrix.md`. | `docs/emulator_matrix_results.md` with API-level rows. | "Compatible with Android 8 through 15." |
-| SMS delivery | **NOT VERIFIED** | `SEND_SMS` is deliberately off and no real SIM/carrier test was performed. | Grant SMS permission on a device with a live SIM and send a controlled CRITICAL test. | Log or screenshot with timestamp; token/number masked. | "SMS fallback works." |
-| Watchdog recovery after force-kill | **NOT RUN** | The watchdog path was not deliberately exercised on the handset. | Enable the watchdog, force-stop the app, wait, and record whether `NodeService` returns. | Updated `../device_evidence/recovery_paths_CPH2381.json` row. | "Watchdog restarts the service." |
-| Microphone-theft recovery | **NOT RUN** | No second recorder app was used to take the microphone. | Start another recorder while ForestEar is live and record the app's behaviour. | Updated recovery JSON row. | "App handles microphone theft." |
+| SMS delivery | **NOT VERIFIED** | No live SIM/carrier test was performed. The phone reports `OUT_OF_SERVICE` / "No SIM - Emergency calls only"; the final `-g` install granted `SEND_SMS`, but granting is not delivery. | Use a device with a live SIM and send a controlled CRITICAL test. | Log or screenshot with timestamp; token/number masked. | "SMS fallback works." |
+| adb permission grants on this ROM | **FAIL (workaround used)** | OxygenOS on CPH2381 rejects `pm grant` from the adb shell with `SecurityException: ... has android.permission.GRANT_RUNTIME_PERMISSIONS`. The old script hid this as "skipped". | `grant_permissions.sh` now verifies actual grants and reports FAILED; use `./scripts/install.sh --grant-all` (explicitly warns that SEND_SMS is included) or grant in Settings. | Script output plus `dumpsys package ... granted=true`. | "grant_permissions.sh silently succeeded." |
+| Watchdog recovery after force-kill | **FAIL (recorded)** | Force-stop at 2026-11-18T15:36:39Z; after 420 s (past the 5-minute alarm) `NodeService_count=0`, `pid=none`. | User must reopen the app. Treat as a known limitation, not a hidden PASS. | `../device_evidence/watchdog_20261118.log` and recovery JSON row. | "Watchdog restarts the service." |
+| Microphone-theft recovery | **PASS (recorded)** | The OnePlus recorder took the mic; the app logged 10 s zero signal, DEGRADED, an audio error, a 30 s restart, then resumed capture and reselected CPH2381; `appops` showed RECORD_AUDIO running again. | None for this path. | `../device_evidence/mic_theft_20261118.log` and recovery JSON row. | "Microphone theft was not exercised" or a recovery time other than the measured 30 s. |
 | Force-kill recovery | **FAIL (recorded)** | `am kill` was refused; force-stop stopped the service and it did not restart. Android 14 blocks this restart for a microphone foreground service. | User must reopen the app. This is an OS limitation, not a hidden PASS. | `../device_evidence/recovery_paths_CPH2381.json`. | "Service auto-restarts after force-stop." |
 | Reboot / boot receiver | **FAIL (recorded)** | No background microphone foreground service restart within 30 s after boot on Android 14. The app shows a notification asking the user to open it. | User action required; document it in OEM guides. | Recovery JSON plus compatibility report. | "Monitoring resumes automatically after reboot." |
-| Final 24 h soak | **PENDING** | Started 2026-11-17T09:26:46Z; the scheduled auto-stop job was cancelled by a server restart and the phone is currently disconnected. | Reconnect the phone; after the full 24 h run `./scripts/soak.sh --stop` (or `--report` if already stopped). | `../device_evidence/soak/` with `soak_report.json`, CSVs and updated `measured_devices.json`. | "24-hour soak passed." |
+| Final 24 h soak | **PENDING** | The 2026-11-17 run is invalid: it stopped after 1 h 29 m when USB power was unplugged and produced no final report. A fresh run started 2026-11-18T15:57:24Z with charging=true and NodeService=3. | Keep the phone powered/connected; after a full 24 h run `./scripts/soak.sh --stop` (or `--report` if already stopped). | `../device_evidence/soak/` with `soak_report.json`, CSVs and updated `measured_devices.json`. | "24-hour soak passed." |
 | Other physical devices | **NOT RUN** | Only CPH2381 was measured. OEM table rows are guidance, not evidence. | Install on at least one device per major OEM family and generate a compatibility report on each. | `../device_evidence/compatibility_report_<model>.md`. | "All supported phones are verified." |
 | SoC junction temperature | **LIMITED** | The handset does not expose it; the thermal governor uses battery temperature. | Use an external sensor or accept and document the battery proxy. | Device evidence note. | "Precise SoC thermal monitoring." |
 | Microphone response | **NOT CHARACTERISED** | Built-in processing (AGC/NS/AEC) differs from the training data. | Calibrate per device or use a measured external microphone; compare log-mel levels. | Calibration report in `../device_evidence/`. | "Device-agnostic microphone accuracy." |
@@ -27,11 +28,14 @@ capability is recorded as missing, never guessed.
 ## Already measured — do not re-label as unknown
 
 - JVM tests: 88 checks across 13 suites, 0 failures.
-- Instrumented tests: 9 checks across 4 suites on CPH2381, 0 failures.
+- Instrumented tests: 9 checks across 4 suites on CPH2381, 0 failures, 0 skipped
+  (`../device_evidence/instrumented_20261118.log`).
 - On-phone benchmark: 49.47 ms mean, tier A, CPU only; GPU delegate unavailable.
-- In-app self-test: 14 checks, 0 failed, 6 warnings; headless: 0 failures, 2 warnings.
+- In-app self-test: 14 checks, 0 failed, 6 warnings; headless self-test on
+  2026-11-18: 0 failures, 2 warnings (`selftest_CPH2381_20261118.txt`).
 - Screen-off continuity: 100% coverage over 303 s, 0 gaps.
-- Recovery: swipe PASS, screen-off PASS, force-kill FAIL, reboot FAIL, boot receiver FAIL.
+- Recovery: swipe PASS, screen-off PASS, microphone-theft PASS (30 s restart),
+  force-kill FAIL, watchdog FAIL, reboot FAIL, boot receiver FAIL.
 - A phone-generated compatibility report exists at
   `../device_evidence/compatibility_report_CPH2381.md`.
 

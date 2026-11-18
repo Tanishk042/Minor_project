@@ -2,7 +2,7 @@
 
 > Generated from `android/ForestEarNode/app/src/main/assets/config/oem_profiles.json` and `android/device_evidence/measured_devices.json` by `android/tools/generate_oem_docs.py`. Do not edit by hand: edit the JSON files and re-run the generator.
 
-Table version: `1` (updated `2026-11-15T00:00:00Z`). Generated: `2026-11-17T09:49:30Z`.
+Table version: `1` (updated `2026-11-15T00:00:00Z`). Generated: `2026-11-18T15:59:27Z`.
 
 ForestEar Node runs on **any Android 8.0+ (API 26) device with a microphone**. There is no allowlist and no Play Services dependency. "Supported" on this page means only that the app will attempt to run and will report what it finds; it is not a claim that every handset has been measured.
 
@@ -14,7 +14,7 @@ Only devices with a pulled `compatibility_report_<model>.md` and its supporting 
 
 | Device | Android | Tier | Measured pipeline | Recovery paths | Report |
 |---|---|---|---|---|---|
-| OnePlus CPH2381 | 14 (API 34), OxygenOS, security patch 2026-08-01 | A | 49.47 ms (android/device_evidence/benchmark_CPH2381.json (detailed per-model run)) | kill_service FAIL (force-stop), swipe_away PASS, screen_off PASS, reboot FAIL, boot_receiver FAIL | [report](../../device_evidence/compatibility_report_CPH2381.md) |
+| OnePlus CPH2381 | 14 (API 34), OxygenOS, security patch 2026-08-01 | A | 49.47 ms (android/device_evidence/benchmark_CPH2381.json (detailed per-model run)) | kill_service FAIL (force-stop), swipe_away PASS, screen_off PASS, watchdog FAIL (no restart after 420 s), mic_theft PASS (zero signal/DEGRADED/30 s restart), reboot FAIL, boot_receiver FAIL | [report](../../device_evidence/compatibility_report_CPH2381.md) |
 
 ## Known device profiles
 

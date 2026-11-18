@@ -13,8 +13,13 @@ are UTC.
 | `selftest_CPH2381.json` | Earlier in-app hardware self-test (14 checks, 0 failed, 7 warnings, latency 145.5 ms). |
 | `selftest_latest_CPH2381.json` | Latest in-app hardware self-test used for the report (14 checks, 0 failed, 6 warnings, latency 274.1 ms). |
 | `selftest_postrecovery_CPH2381.txt` | Headless `self_test.sh` output after the reboot/recovery sequence: failures=0, warnings=2 (phone state and SMS, both optional). |
-| `recovery_paths_CPH2381.json` | Recovered outcomes actually recorded by the app: kill FAIL, swipe PASS, screen-off PASS with 100% audio coverage, reboot FAIL, boot receiver FAIL. |
-| `compatibility_report_CPH2381.md` | App-generated Markdown report pulled from the handset. This is the canonical device report. |
+| `selftest_CPH2381_20261118.txt` | Fresh headless self-test on 2026-11-18 with the backend reachable over `adb reverse`: failures=0, warnings=2. |
+| `instrumented_20261118.log` | On-device `./gradlew connectedAndroidTest`: 9 tests, 0 failures, 0 skipped (1.743 s). |
+| `watchdog_20261118.log` | Force-stop at 15:36:39Z; 420 s later NodeService_count=0 and pid=none → watchdog FAIL. |
+| `mic_theft_20261118.log` | Full microphone-theft sequence: zero signal → DEGRADED → 30 s restart → capture resumed → PASS. |
+| `soak/20261118-210215/` | Pulled partial soak: 1058 samples over 1 h 29 m, USB power unplugged mid-run, no final report → INVALID. |
+| `recovery_paths_CPH2381.json` | Consolidated measured outcomes: kill FAIL, swipe PASS, screen-off PASS, reboot FAIL, boot receiver FAIL, watchdog FAIL, mic_theft PASS. Rows recorded on 2026-11-18 came from the app's own store; earlier rows and the watchdog row are preserved from their logs because the later `adb install -g -r` reset the app's stored recovery log. |
+| `compatibility_report_CPH2381.md` | App-generated Markdown report pulled from the handset. It predates the 2026-11-18 watchdog and microphone-theft tests, so its two NOT RUN rows are stale; use `recovery_paths_CPH2381.json` and the dated logs for the current status. |
 | `measured_devices.json` | Machine-readable summary consumed by `android/tools/generate_oem_docs.py` for the supported-devices table. |
 
 ## How the recovery results were obtained
@@ -33,8 +38,20 @@ are UTC.
   find NodeService running, so the restart may be delayed by boot/unlock; this does
   not change the measured 30 s result. On Android 14+ a microphone foreground
   service cannot legally start from the background without opening the app.
-- `watchdog` and `mic_theft` were **not exercised**; the report prints them as
-  NOT RUN.
+- `watchdog` — the app was force-stopped at 2026-11-18T15:36:39Z. After 420 s
+  (longer than the 5-minute alarm) `NodeService_count=0` and `pid=none`, so the
+  watchdog did **not** restart the service: **FAIL**. The app had to be opened
+  manually. Evidence: `watchdog_20261118.log`. The app's stored row was lost
+  when the debug APK was reinstalled with `-g` later, so this row is preserved
+  from the timestamped log.
+- `mic_theft` — the phone's own OnePlus recorder was started while ForestEar
+  held the microphone. ForestEar logged `zero signal for 10000ms`, marked the
+  node DEGRADED, reported an audio error, scheduled a restart in 30 s, reopened
+  AudioRecord at 21:24:48 (device time), resumed capture and reselected the
+  CPH2381 input route. `appops` then showed RECORD_AUDIO running again for
+  ForestEar and no longer running for the recorder: **PASS**. Evidence:
+  `mic_theft_20261118.log`. The first two attempts that failed to launch a
+  recorder are recorded in the same file and are explicitly not counted.
 
 ## Harness caveats (not app bugs)
 
@@ -50,13 +67,25 @@ are UTC.
   neither is an estimate.
 - The device profile in the pulled report predates the final permission state, so
   it shows fine/coarse location as false even though location was later granted.
-  The permission row in the latest self-test shows microphone granted; phone state
-  and SMS remain deliberately off and are reported as warnings.
+  The permission row in the latest self-test shows microphone granted. This ROM
+  refuses `pm grant` from the adb shell (`SecurityException`), so the final
+  install used `adb install -g -r`, which grants all requested permissions,
+  **including SEND_SMS**. Earlier warnings about phone state/SMS describe the
+  state at the time those tests ran, not the final state.
 - The CARTO map key used by the dashboard was exposed in chat and in `forestear/.env`.
   Rotate it or restrict it to the deployment domain before publishing.
 
 ## 24-hour soak
 
-Started at 2026-11-17T09:26:46Z with `android/scripts/soak.sh --start`. The final
-soak report will replace the `soak` line in `measured_devices.json` once it is
-pulled after 24 h. Status can be checked with `android/scripts/soak.sh --status`.
+- **Invalid earlier run:** started 2026-11-17T09:26:46Z. The pulled samples stop
+  at 2026-11-17T10:55:30Z after 1 h 29 m, charging changes `true → false` at
+  10:55:30Z, and no `soak_report.json` was produced. The files are preserved in
+  `soak/20261118-210215/` but this run is **NOT a 24-hour soak and did not pass**.
+- **Current run:** started 2026-11-18T15:57:24Z with
+  `android/scripts/soak.sh --start` after all tests and reinstalls were finished.
+  First status check: `status=2, level=80, charging=true, NodeService=3`,
+  thermal status 0. It is still in progress. Check with
+  `android/scripts/soak.sh --status`; pull the final report with
+  `android/scripts/soak.sh --stop` (or `--report` if already stopped) only after
+  a full 24 h. Until `soak_report.json` exists and covers 24 h, the honest status
+  is **PENDING**, not PASS.

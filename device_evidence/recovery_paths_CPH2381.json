@@ -28,5 +28,23 @@
     "outcome": "PASS",
     "detail": "coverage 100%, gaps=0, 303s",
     "recorded_utc": "2026-11-17T09:46:20.103Z"
+  },
+  {
+    "path": "watchdog",
+    "outcome": "FAIL",
+    "detail": "service absent 420s after force-stop; app had to be relaunched manually (force-stop 15:36:39Z, observation 15:43:52Z)",
+    "recorded_utc": "2026-11-18T15:43:52Z"
+  },
+  {
+    "path": "boot_receiver",
+    "outcome": "FAIL",
+    "detail": "background start blocked on API 34; notification shown",
+    "recorded_utc": "2026-11-18T15:49:00.568Z"
+  },
+  {
+    "path": "mic_theft",
+    "outcome": "PASS",
+    "detail": "OnePlus recorder took the microphone; ForestEar detected 10 s digital silence, marked DEGRADED, restarted audio after 30 s, resumed capture on CPH2381 and appops returned to RECORD_AUDIO running.",
+    "recorded_utc": "2026-11-18T15:55:35.164Z"
   }
 ]

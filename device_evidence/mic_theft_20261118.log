@@ -1,0 +1,48 @@
+=== Microphone-theft recovery — CPH2381 / 2026-11-18 ===
+Final status recorded: PASS (via scripts/recovery_test.sh record mic_theft)
+Evidence saved UTC: 2026-11-18T15:55:34Z
+
+--- Setup ---
+ForestEar: org.forestear.node; NodeService foreground with microphone (types=00000081).
+Competing recorder: com.oneplus.soundrecorder, launched via its exported
+launcher activity com.soundrecorder.browsefile.BrowseFile, which opens
+com.soundrecorder.record.RecorderActivity.
+The recorder's own RECORD_AUDIO permission was initially "Not allowed"; it was
+granted through the phone's Settings UI. Its RecorderActivity is not exported,
+so an explicit adb launch of it fails with a permission denial.
+
+--- Earlier attempts (not exercised — honest) ---
+2026-11-18T15:44:12Z: device asleep/locked, service=0, recorder could not
+  launch. No recording started, so no theft was exercised.
+2026-11-18T15:50:13Z: service=3, but starting RecorderActivity failed with
+  "Permission Denial ... not exported from uid 10237". No recording started.
+
+--- Successful attempt ---
+2026-11-18T15:53Z: phone unlocked; recorder UI showed "Start Recording";
+ForestEar service was foreground with an active microphone; tapped Start.
+
+Device logcat, observed live (device time is UTC+05:30):
+11-18 21:24:07.837 I ForestEar: audio capture: source=UNPROCESSED rate=16000
+11-18 21:24:07.890 I ForestEar: active input: CPH2381 (built-in mic, id=17)
+
+11-18 21:24:18.063 W ForestEar: zero signal for 10000ms
+11-18 21:24:18.063 W ForestEar: node DEGRADED: microphone produced digital silence for 10s
+11-18 21:24:18.072 E ForestEar: audio error: input produced 10 s of digital silence
+11-18 21:24:18.072 W ForestEar: node DEGRADED: audio capture failed: input produced 10 s of digital silence
+11-18 21:24:18.215 W ForestEar: restarting audio in 30000ms (input produced 10 s of digital silence)
+
+11-18 21:24:48.222 I ForestEar: PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED=true
+11-18 21:24:48.257 I ForestEar: preferred input CPH2381 (id=17) accepted=true
+11-18 21:24:48.273 I ForestEar: audio capture: source=UNPROCESSED rate=16000
+11-18 21:24:48.328 I ForestEar: active input: CPH2381 (built-in mic, id=17)
+11-18 21:24:49.399 I ForestEar: input route changed: CPH2381 (built-in mic, id=17) -> CPH2381
+11-18 21:24:49.399 I ForestEar: audio route changed to CPH2381
+
+--- Observed state after recovery ---
+appops get org.forestear.node RECORD_AUDIO:
+  Uid mode: RECORD_AUDIO: foreground
+  RECORD_AUDIO: allow; time=+34s210ms ago (running)
+appops get com.oneplus.soundrecorder RECORD_AUDIO:
+  Uid mode: RECORD_AUDIO: foreground
+  RECORD_AUDIO: allow; time=+2m15s7ms ago; duration=+1m40s701ms  (no longer running)
+NodeService count: 3

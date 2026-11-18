@@ -4,6 +4,7 @@
 # Usage:
 #   ./install.sh              # debug build, install, grant runtime permissions
 #   ./install.sh --no-grant   # skip permission grants
+#   ./install.sh --grant-all  # install with -g (grants ALL permissions incl. SMS)
 #   ./install.sh --release    # assembleRelease (unsigned; needs signing config)
 #
 # Requires: JDK 17+ (JDK 21 recommended), Android SDK at ~/Library/Android/sdk
@@ -12,13 +13,15 @@ set -euo pipefail
 
 PKG="${FORESTEAR_PACKAGE:-org.forestear.node}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT="$(cd "$HERE/.." && pwd)"
+PROJECT="$(cd "$HERE/../ForestEarNode" && pwd)"
 
 GRANT=1
+GRANT_ALL=0
 VARIANT="debug"
 for arg in "$@"; do
   case "$arg" in
     --no-grant) GRANT=0 ;;
+    --grant-all) GRANT_ALL=1 ;;
     --release) VARIANT="release" ;;
     -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
@@ -50,7 +53,13 @@ fi
 [[ -f "$APK" ]] || { echo "APK not found: $APK" >&2; exit 1; }
 
 echo "== installing $APK =="
-"$ADB" install -r "$APK"
+if [[ "$GRANT_ALL" == "1" ]]; then
+  echo "WARNING: -g grants ALL requested runtime permissions, including SEND_SMS."
+  "$ADB" install -g -r "$APK"
+  GRANT=0
+else
+  "$ADB" install -r "$APK"
+fi
 
 if [[ "$GRANT" == "1" ]]; then
   "$HERE/grant_permissions.sh" || true

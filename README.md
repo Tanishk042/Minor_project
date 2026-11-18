@@ -60,8 +60,9 @@ Measured on this checkout / on the CPH2381 handset:
 - In-app self-test: **14 checks, 0 failed, 6 warnings**; headless self-test:
   **0 failures, 2 warnings**.
 - Recovery: swipe **PASS**, screen-off **PASS** (100% coverage over 303 s),
-  force-kill **FAIL**, reboot **FAIL**, boot receiver **FAIL**; watchdog and
-  microphone theft **NOT RUN**.
+  microphone theft **PASS** (10 s zero signal, DEGRADED, 30 s restart),
+  force-kill **FAIL**, watchdog **FAIL** (no restart after 420 s), reboot
+  **FAIL**, boot receiver **FAIL**.
 - Compatibility report generated on the phone and pulled into
   `device_evidence/compatibility_report_CPH2381.md`.
 
@@ -70,9 +71,10 @@ Not measured / not verified here:
 - Signed release APK (no keystore supplied); emulator API matrix (no emulator or
   system images installed).
 - Real Telegram and SMS delivery; labelled real field audio; real TDOA
-  clock-offset correction.
-- Watchdog and microphone-theft recovery; final 24 h soak report (the scheduled
-  auto-stop job was cancelled and the phone is currently disconnected).
+  clock-offset correction. (`SEND_SMS` was granted by the final `-g` install,
+  but no live SIM/carrier test ran.)
+- Final 24 h soak report. The 2026-11-17 run is invalid (power unplugged after
+  1 h 29 m); a fresh run started 2026-11-18T15:57:24Z and is still in progress.
 - SoC junction temperature (not exposed) and per-device microphone response.
 
 No number is claimed until its tool actually ran. The recovery script records
