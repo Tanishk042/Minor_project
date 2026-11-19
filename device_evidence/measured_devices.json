@@ -12,7 +12,7 @@
     "self_test": "14 checks / 0 failed / 6 warnings",
     "continuity": "100% coverage over 303 s, 0 gap events (app-recorded screen-off continuity test)",
     "recovery": "kill_service FAIL (force-stop), swipe_away PASS, screen_off PASS, watchdog FAIL (no restart after 420 s), mic_theft PASS (zero signal/DEGRADED/30 s restart), reboot FAIL, boot_receiver FAIL",
-    "soak": "2026-11-17 run INVALID (1 h 29 m, power unplugged, no report); fresh run started 2026-11-18T15:57:24Z, 24 h report PENDING",
+    "soak": "2026-11-17 run INVALID (1 h 29 m, power unplugged, no report); final powered run 2026-11-18T15:57:08Z to 2026-11-19T15:50:25Z = 85,997 s (23 h 53 m), 17,072 samples, max gap 6.76 s, charging=true throughout, thermal NONE, governor NORMAL, battery 80-100 %, 21.6-31.1 C, restarts 1->1, alerts 93, queue 0; completed_24h=false -> PARTIAL, no full-day PASS",
     "report": "device_evidence/compatibility_report_CPH2381.md",
     "evidence": [
       "device_evidence/benchmark_CPH2381.json",
@@ -25,6 +25,10 @@
       "device_evidence/mic_theft_20261118.log",
       "device_evidence/recovery_paths_CPH2381.json",
       "device_evidence/soak/20261118-210215/soak_samples.csv",
+      "device_evidence/soak/20261119-212027/soak_report.json",
+      "device_evidence/soak/20261119-212027/soak_samples.csv",
+      "device_evidence/soak/20261119-212027/battery_log.csv",
+      "device_evidence/soak/20261119-212027/FINAL_SOAK_SUMMARY.md",
       "device_evidence/compatibility_report_CPH2381.md"
     ],
     "notes": "Measured on the development laptop's adb-connected handset. GPU delegate was unavailable, so the benchmark is CPU-only. The in-app report embeds 48.72 ms from the last settings benchmark while the detailed benchmark JSON records 49.47 ms from a separate run; both are measured, not estimates."

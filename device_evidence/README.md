@@ -18,6 +18,7 @@ are UTC.
 | `watchdog_20261118.log` | Force-stop at 15:36:39Z; 420 s later NodeService_count=0 and pid=none → watchdog FAIL. |
 | `mic_theft_20261118.log` | Full microphone-theft sequence: zero signal → DEGRADED → 30 s restart → capture resumed → PASS. |
 | `soak/20261118-210215/` | Pulled partial soak: 1058 samples over 1 h 29 m, USB power unplugged mid-run, no final report → INVALID. |
+| `soak/20261119-212027/` | Final powered run: `soak_report.json` + 17,072 samples + battery log + `FINAL_SOAK_SUMMARY.md`. 23 h 53 m, `completed_24h=false` → PARTIAL, not a full-day PASS. |
 | `recovery_paths_CPH2381.json` | Consolidated measured outcomes: kill FAIL, swipe PASS, screen-off PASS, reboot FAIL, boot receiver FAIL, watchdog FAIL, mic_theft PASS. Rows recorded on 2026-11-18 came from the app's own store; earlier rows and the watchdog row are preserved from their logs because the later `adb install -g -r` reset the app's stored recovery log. |
 | `compatibility_report_CPH2381.md` | App-generated Markdown report pulled from the handset. It predates the 2026-11-18 watchdog and microphone-theft tests, so its two NOT RUN rows are stale; use `recovery_paths_CPH2381.json` and the dated logs for the current status. |
 | `measured_devices.json` | Machine-readable summary consumed by `android/tools/generate_oem_docs.py` for the supported-devices table. |
@@ -81,11 +82,15 @@ are UTC.
   at 2026-11-17T10:55:30Z after 1 h 29 m, charging changes `true → false` at
   10:55:30Z, and no `soak_report.json` was produced. The files are preserved in
   `soak/20261118-210215/` but this run is **NOT a 24-hour soak and did not pass**.
-- **Current run:** started 2026-11-18T15:57:24Z with
+- **Final powered run:** started 2026-11-18T15:57:08Z with
   `android/scripts/soak.sh --start` after all tests and reinstalls were finished.
-  First status check: `status=2, level=80, charging=true, NodeService=3`,
-  thermal status 0. It is still in progress. Check with
-  `android/scripts/soak.sh --status`; pull the final report with
-  `android/scripts/soak.sh --stop` (or `--report` if already stopped) only after
-  a full 24 h. Until `soak_report.json` exists and covers 24 h, the honest status
-  is **PENDING**, not PASS.
+  It was stopped at the user's instruction on 2026-11-19T15:50:25Z, about 7
+  minutes before the 24 h target, so the device report records
+  `completed_24h=false`. The honest status is **PARTIAL**, not a full-day PASS.
+  Files: `soak/20261119-212027/soak_report.json`, `soak_samples.csv`,
+  `battery_log.csv`, and `FINAL_SOAK_SUMMARY.md`.
+  Measured inside the run: 17,072 samples, first 2026-11-18T15:57:08.969Z,
+  last 2026-11-19T15:50:24.749Z, duration 85,997 s (23 h 53 m), max gap 6.76 s
+  (0 gaps > 90 s), `charging=true` in every sample, thermal `NONE`, governor
+  `NORMAL`, battery 80–100 %, temperature 21.6–31.1 °C, restarts 1 → 1,
+  dropped frames 3, alerts 93, queue 0. A full 24 h claim requires a new run.
