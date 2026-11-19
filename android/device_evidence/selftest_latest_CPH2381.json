@@ -1,0 +1,91 @@
+{
+  "generated_utc": "2026-11-17T09:41:34.958Z",
+  "failed": 0,
+  "warned": 6,
+  "items": [
+    {
+      "id": "capabilities",
+      "title": "Device capability probe",
+      "status": "WARN",
+      "detail": "OnePlus CPH2381 · Android 14 (API 34) · 8 cores · 5390 MB RAM · arm64-v8a\/armeabi-v7a\/armeabi · missing: network_type_permission (SecurityException)"
+    },
+    {
+      "id": "audio_inputs",
+      "title": "Audio input enumeration",
+      "status": "PASS",
+      "detail": "CPH2381 (built-in mic), CPH2381 (built-in mic), CPH2381 (input type 16), CPH2381 (input type 18), CPH2381 (input type 25) | native=48000 Hz, requested=16000 Hz"
+    },
+    {
+      "id": "microphone",
+      "title": "Microphone input",
+      "status": "PASS",
+      "detail": "input=CPH2381 rms=-57.0 dBFS peak=-43.3 dBFS | unprocessed=true"
+    },
+    {
+      "id": "headset",
+      "title": "Wired headset detection",
+      "status": "WARN",
+      "detail": "no 3.5 mm headset detected (built-in mic will be used)"
+    },
+    {
+      "id": "usb_mic",
+      "title": "USB microphone detection",
+      "status": "WARN",
+      "detail": "no USB microphone attached"
+    },
+    {
+      "id": "mic_permission",
+      "title": "Microphone permission",
+      "status": "PASS",
+      "detail": "granted"
+    },
+    {
+      "id": "phone_state",
+      "title": "Phone state (signal\/SIM)",
+      "status": "WARN",
+      "detail": "denied"
+    },
+    {
+      "id": "protections",
+      "title": "OnePlus \/ Oppo \/ Realme (ColorOS, OxygenOS, realme UI) background protections",
+      "status": "PASS",
+      "detail": "all required checks confirmed"
+    },
+    {
+      "id": "network",
+      "title": "Internet connectivity",
+      "status": "PASS",
+      "detail": "Wi-Fi, validated"
+    },
+    {
+      "id": "backend",
+      "title": "Backend reachability",
+      "status": "PASS",
+      "detail": "GET \/health -> 200 (http:\/\/127.0.0.1:8000)"
+    },
+    {
+      "id": "models",
+      "title": "Model loading and inference",
+      "status": "PASS",
+      "detail": "9 models loaded, m9 sum=1.000, birdnet=on, latency=274.1 ms"
+    },
+    {
+      "id": "sms_capability",
+      "title": "SMS capability",
+      "status": "WARN",
+      "detail": "SEND_SMS not granted"
+    },
+    {
+      "id": "thermal",
+      "title": "Battery \/ thermal readings",
+      "status": "PASS",
+      "detail": "level=55% temp=35.5 C thermal=SEVERE current=-1 mA"
+    },
+    {
+      "id": "signal",
+      "title": "Cellular signal",
+      "status": "WARN",
+      "detail": "type=permission denied dbm=n\/a operator=n\/a"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+start 2026-11-18T15:36:39Z
+before: 0
+force-stopped 2026-11-18T15:36:39Z
+after 420s: NodeService_count=0 pid=none 2026-11-18T15:43:52Z
+recorded  watchdog       FAIL    service absent 420s after force-stop; app had to be relaunched manually
+done 2026-11-18T15:43:57Z

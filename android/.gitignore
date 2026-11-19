@@ -1,0 +1,29 @@
+# Gradle / Android build output
+.gradle/
+build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Machine-local SDK path
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Python helpers
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Release signing material — never commit
+keystore.properties
+*.jks
+*.keystore

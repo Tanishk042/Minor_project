@@ -1,0 +1,16 @@
+{
+  "started_utc": "2026-11-18T15:57:08.094Z",
+  "ended_utc": "2026-11-19T15:50:25.300Z",
+  "duration_s": 85997,
+  "restarts_start": 1,
+  "restarts_end": 1,
+  "dropped_frames": 3,
+  "alerts_sent": 93,
+  "queue_size": 0,
+  "min_battery_pct": 80,
+  "max_battery_pct": 100,
+  "min_temp_c": 21.600000381469727,
+  "max_temp_c": 31.100000381469727,
+  "samples": 17072,
+  "completed_24h": false
+}

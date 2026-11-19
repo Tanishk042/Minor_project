@@ -1,0 +1,24 @@
+ForestEar Node self-test
+========================
+PASS  device connected (732738b7)
+      model=CPH2381 sdk=34
+PASS  package installed (version 1.0.0)
+PASS  APK present and contains model assets (100381262 bytes)
+PASS  microphone granted
+PASS  fine location granted
+WARN  phone state not granted (READ_PHONE_STATE) - optional
+WARN  SMS fallback not granted (SEND_SMS) - optional
+PASS  notifications granted
+PASS  app is on the Doze / battery-optimisation allowlist
+PASS  NodeService is running
+          isForeground=true foregroundId=1001 types=00000081 foregroundNoti=Notification(channel=forestear_service shortcut=null contentView=null vibrate=null sound=null defaults=0x0 flags=0x6a color=0x00000000 category=service actions=1 vis=PRIVATE)
+PASS  telephony hardware present
+      subscription records seen: 0
+PASS  network connected
+        NetworkAgentInfo{network{103}  handle{445787328525}  ni{WIFI CONNECTED extra: } created=2026-11-18T00:22:32.610Z Score(Policies : TRANSPOR
+PASS  backend reachable at http://127.0.0.1:8000
+PASS  thermal service reports: Thermal Status: 0
+PASS  no recent crash-buffer entries for org.forestear.node
+
+========================
+failures=0 warnings=2

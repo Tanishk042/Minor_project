@@ -1,0 +1,103 @@
+{
+  "generated_utc": "2026-11-17T09:13:49.302Z",
+  "total_mean_ms": 49.473559800000004,
+  "cpu_pct": 160.87032693630502,
+  "ram_mb": 321.0888671875,
+  "note": "GPU used only when it was both available and >5% faster and stable; numbers are on-device and will vary with thermal state.",
+  "tier": "A",
+  "tier_reason": "measured 49.5 ms \/ 400 ms budget = 0.12×",
+  "chosen_delegates": {
+    "m1": "CPU_XNNPACK",
+    "m2": "CPU_XNNPACK",
+    "m3": "CPU_XNNPACK",
+    "m4": "CPU_XNNPACK",
+    "m5": "CPU_XNNPACK",
+    "m6": "CPU_XNNPACK",
+    "m7": "CPU_XNNPACK",
+    "m8": "CPU_XNNPACK",
+    "m9": "KOTLIN_TREES"
+  },
+  "per_model": [
+    {
+      "model": "m1",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 8.4022499,
+      "p95_ms": 8.810156,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m2",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 1.1883852,
+      "p95_ms": 1.274115,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m3",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 0.2049506,
+      "p95_ms": 0.317605,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m4",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 0.11672915000000002,
+      "p95_ms": 0.166667,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m5",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 0.9782526999999999,
+      "p95_ms": 1.08698,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m6",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 3.25788555,
+      "p95_ms": 3.482553,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m7",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 0.20910425,
+      "p95_ms": 0.328489,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m8",
+      "delegate": "CPU_XNNPACK",
+      "mean_ms": 71.6163906,
+      "p95_ms": 76.229531,
+      "runs": 20,
+      "ok": true,
+      "note": "gpu unavailable: Failed resolution of: Lorg\/tensorflow\/lite\/gpu\/GpuDelegateFactory$Options;"
+    },
+    {
+      "model": "m9",
+      "delegate": "KOTLIN_TREES",
+      "mean_ms": 0.4650025000000001,
+      "p95_ms": 0.525416,
+      "runs": 20,
+      "ok": true,
+      "note": ""
+    }
+  ]
+}

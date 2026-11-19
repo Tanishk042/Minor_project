@@ -1,0 +1,578 @@
+{
+  "schema": 1,
+  "updated_utc": "2026-11-15T00:00:00Z",
+  "note": "Best-effort OEM settings table. Intents are tried in order and every launch is wrapped in try/catch with a resolve check. Manufacturer screens change between OS releases, so the plain-language steps are the source of truth and the intents are only shortcuts. Verify current instructions at dontkillmyapp.com.",
+  "default_profile": "generic",
+  "profiles": [
+    {
+      "id": "oneplus",
+      "display_name": "OnePlus / Oppo / Realme (ColorOS, OxygenOS, realme UI)",
+      "manufacturer_keys": ["oneplus", "oppo", "realme"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/oneplus",
+      "notes": "ColorOS/OxygenOS/realme UI freeze background apps aggressively. Battery optimisation exemption alone is not enough; auto-launch and background activity are separate switches. The OnePlus Nord CE 2 Lite 5G is a known device in this family.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → Auto-launch (or App launch / Startup manager).",
+          "Find ForestEar Node and enable it.",
+          "If the list is hidden, use the search icon and type ForestEar."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery optimisation.",
+          "Switch to the All apps list, find ForestEar Node, choose Don't optimise / Unrestricted."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery.",
+          "Enable Allow background activity.",
+          "Also disable Sleep standby optimisation if the phone offers it."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card.",
+          "Tap the lock icon so the card cannot be swiped away."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps.",
+          "Allow ForestEar Node. This is optional and only helps bring the app back after a kill on some builds."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Battery health / Charging limit.",
+          "If an 80–85% cap exists, consider enabling it for a permanently powered node.",
+          "A capped battery still reports 100% of its usable range; do not treat the cap as a fault."
+        ],
+        "battery_health": [
+          "Inspect the battery for swelling: a bulging back cover, screen lift or wobble on a flat surface is a stop signal.",
+          "If the phone is permanently powered, keep it shaded and below ~40 °C ambient.",
+          "Replace the battery if it swells, overheats at idle or drops from full to empty in minutes."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"component": "com.coloros.safecenter/com.coloros.safecenter.permission.startup.StartupAppListActivity"},
+          {"component": "com.coloros.safecenter/com.coloros.safecenter.startupapp.StartupAppListActivity"},
+          {"component": "com.oplus.safecenter/com.oplus.safecenter.permission.startup.StartupAppListActivity"},
+          {"component": "com.oplus.safecenter/com.oplus.safecenter.startupapp.StartupAppListActivity"},
+          {"component": "com.oneplus.security/com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity"},
+          {"component": "com.oneplus.security/com.oneplus.security.startupapp.StartupAppListActivity"},
+          {"action": "com.coloros.safecenter.permission.startup.StartupAppListActivity"},
+          {"action": "com.oplus.safecenter.permission.startup.StartupAppListActivity"}
+        ],
+        "background_activity": [
+          {"component": "com.coloros.safecenter/com.coloros.safecenter.permission.startup.StartupAppListActivity"},
+          {"component": "com.oplus.safecenter/com.oplus.safecenter.permission.startup.StartupAppListActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"component": "com.oplus.battery/com.oplus.powermanager.fuelgaue.PowerUsageModelActivity"},
+          {"component": "com.coloros.healthcheck/com.coloros.healthcheck.activity.BatteryHealthActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "xiaomi",
+      "display_name": "Xiaomi / Redmi / Poco (MIUI, HyperOS)",
+      "manufacturer_keys": ["xiaomi", "redmi", "poco"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/xiaomi",
+      "notes": "MIUI/HyperOS needs Autostart, Battery saver = No restrictions, and often 'Display pop-up windows while running in background'. The recents lock is essential. Some builds hide Autostart until the app has been opened once.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → Manage apps → ForestEar Node → Autostart.",
+          "Enable Autostart and any 'Start in background' option.",
+          "Also open the Security app → Permissions → Autostart and enable ForestEar Node."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery saver → App battery saver → ForestEar Node.",
+          "Choose No restrictions.",
+          "Disable 'Sleep standby optimisation' for this app if present."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → Manage apps → ForestEar Node → Battery saver.",
+          "Choose No restrictions.",
+          "Enable 'Display pop-up windows while running in background' if present."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card.",
+          "Tap the lock icon."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Manage apps → ForestEar Node → Other permissions.",
+          "Allow 'Display pop-up windows while running in background'."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Battery protection / Charging limit.",
+          "If an 80% cap exists, consider enabling it for a permanently powered node."
+        ],
+        "battery_health": [
+          "Inspect for swelling; MIUI reports battery health in Settings → Battery.",
+          "Replace a swollen or rapidly degrading battery before permanent deployment."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"component": "com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity"},
+          {"component": "com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartDetailManagementActivity"},
+          {"action": "miui.intent.action.OP_AUTO_START", "data": "package:{package}"}
+        ],
+        "background_activity": [
+          {"component": "com.miui.powerkeeper/com.miui.powerkeeper.ui.HiddenAppsConfigActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"component": "com.miui.powerkeeper/com.miui.powerkeeper.ui.HiddenAppsConfigActivity"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"component": "com.miui.powerkeeper/com.miui.powerkeeper.ui.HiddenAppsConfigActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "vivo",
+      "display_name": "Vivo / iQOO (Funtouch OS, OriginOS)",
+      "manufacturer_keys": ["vivo", "iqoo"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/vivo",
+      "notes": "Funtouch/OriginOS has an Autostart manager and a separate high background power consumption allowlist. Both are needed. Some builds label it 'Background power consumption management'.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → Autostart manager (or i Manager → App manager → Autostart).",
+          "Enable ForestEar Node."
+        ],
+        "battery": [
+          "Open Settings → Battery → Background power consumption management.",
+          "Allow ForestEar Node high background power consumption.",
+          "Set Battery optimisation to Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery.",
+          "Allow background activity and disable battery optimisation."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card, tap the lock icon."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps.",
+          "Allow ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Charging limit / Battery health.",
+          "Enable an 80–85% cap if offered."
+        ],
+        "battery_health": [
+          "Inspect for swelling and check Settings → Battery → Battery health.",
+          "Replace a swollen battery immediately."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"component": "com.vivo.permissionmanager/com.vivo.permissionmanager.activity.BgStartUpManagerActivity"},
+          {"component": "com.iqoo.secure/com.iqoo.secure.ui.phoneoptimize.BgStartUpManager"},
+          {"action": "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"}
+        ],
+        "background_activity": [
+          {"component": "com.vivo.permissionmanager/com.vivo.permissionmanager.activity.BgStartUpManagerActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "samsung",
+      "display_name": "Samsung (One UI)",
+      "manufacturer_keys": ["samsung"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/samsung",
+      "notes": "One UI uses 'Sleeping apps' and 'Deep sleeping apps'. Remove ForestEar Node from both lists and set the battery usage to Unrestricted. The recents lock is less important on Samsung but still useful.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Battery and device care → Battery → Background usage limits.",
+          "Remove ForestEar Node from Sleeping apps and Deep sleeping apps.",
+          "Add it to Never sleeping apps if the list exists."
+        ],
+        "battery": [
+          "Open Settings → Apps → ForestEar Node → Battery.",
+          "Choose Unrestricted.",
+          "Disable 'Put unused apps to sleep' if you can."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery → Unrestricted.",
+          "Disable 'Pause app activity if unused'."
+        ],
+        "recents": [
+          "Open Recents, tap the ForestEar Node icon, choose Keep open / Lock."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special access → Appear on top.",
+          "Allow ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Battery protection.",
+          "Choose Maximum (80%) or Adaptive if offered."
+        ],
+        "battery_health": [
+          "Open Samsung Members → Diagnostics → Battery status.",
+          "Inspect for swelling and replace a degraded battery."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"component": "com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity"},
+          {"component": "com.samsung.android.lool/com.samsung.android.sm.ui.battery.AppSleepListActivity"},
+          {"component": "com.samsung.android.sm/com.samsung.android.sm.ui.battery.BatteryActivity"}
+        ],
+        "background_activity": [
+          {"component": "com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"component": "com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"component": "com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "huawei",
+      "display_name": "Huawei / Honor (EMUI, MagicOS)",
+      "manufacturer_keys": ["huawei", "honor"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/huawei",
+      "notes": "EMUI/MagicOS uses 'App launch' with three toggles per app (Auto-launch, Secondary launch, Run in background). All three must be enabled. Also exclude the app from power-intensive background cleanup.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → App launch (or Startup manager).",
+          "Find ForestEar Node and turn off automatic management.",
+          "Enable Auto-launch, Secondary launch and Run in background."
+        ],
+        "battery": [
+          "Open Settings → Battery → More battery settings → Power intensive apps.",
+          "Allow ForestEar Node.",
+          "Set Battery optimisation to Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery.",
+          "Allow background activity and disable power-intensive prompt."
+        ],
+        "recents": [
+          "Open Recents, swipe down on the ForestEar Node card, tap the lock icon."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special access → Display over other apps.",
+          "Allow ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Charging limit / Smart charge.",
+          "Enable an 80–85% cap if offered."
+        ],
+        "battery_health": [
+          "Open Settings → Battery → Battery health (if present).",
+          "Inspect for swelling; replace a swollen battery."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"component": "com.huawei.systemmanager/com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"},
+          {"component": "com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity"},
+          {"component": "com.hihonor.systemmanager/com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity"}
+        ],
+        "background_activity": [
+          {"component": "com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"component": "com.huawei.systemmanager/com.huawei.systemmanager.optimize.process.ProtectActivity"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "motorola",
+      "display_name": "Motorola (My UX)",
+      "manufacturer_keys": ["motorola", "moto"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/motorola",
+      "notes": "Near-stock Android. Battery optimisation exemption and unrestricted battery usage are usually enough. Some My UX builds add a 'Battery saver' app list.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → ForestEar Node.",
+          "Enable any 'Allow auto-start' switch if present."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery optimisation → All apps → ForestEar Node → Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery → Unrestricted."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card, tap the lock icon."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps → ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Charging limit / Overcharge protection if offered."
+        ],
+        "battery_health": [
+          "Inspect for swelling and replace a degraded battery."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "background_activity": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "google",
+      "display_name": "Google Pixel / stock Android",
+      "manufacturer_keys": ["google", "android"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/google",
+      "notes": "Stock Android is the least aggressive. Battery optimisation exemption plus unrestricted battery usage is normally sufficient. Android 15 still forbids a boot receiver from starting a microphone foreground service.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → ForestEar Node.",
+          "No OEM autostart switch is normally present; keep auto-start enabled in the app."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery optimisation → All apps → ForestEar Node → Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery → Unrestricted."
+        ],
+        "recents": [
+          "Open Recents and lock the ForestEar Node card if your launcher supports it."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps → ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Charging optimisation / Limit to 80% if offered."
+        ],
+        "battery_health": [
+          "Inspect for swelling and replace a degraded battery."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "background_activity": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "nothing",
+      "display_name": "Nothing (Nothing OS)",
+      "manufacturer_keys": ["nothing"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/nothing",
+      "notes": "Near-stock Android with a light battery manager. Battery exemption and unrestricted usage are normally enough.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → ForestEar Node.",
+          "Enable any auto-start switch if present."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery optimisation → ForestEar Node → Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery → Unrestricted."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card, tap the lock icon."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps → ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Charging limit if offered."
+        ],
+        "battery_health": [
+          "Inspect for swelling and replace a degraded battery."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "background_activity": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "asus",
+      "display_name": "Asus (ZenUI, ROG UI)",
+      "manufacturer_keys": ["asus", "zenfone", "rog"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/asus",
+      "notes": "ZenUI/ROG UI has an Auto-start manager and a Mobile Manager power-saving list. Both may need ForestEar Node allowed.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → Auto-start manager.",
+          "Enable ForestEar Node.",
+          "Also open Mobile Manager → PowerMaster → Auto-start manager."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery optimisation → ForestEar Node → Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery → Unrestricted."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card, tap the lock icon."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps → ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery → Charging limit if offered."
+        ],
+        "battery_health": [
+          "Inspect for swelling and replace a degraded battery."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"component": "com.asus.mobilemanager/com.asus.mobilemanager.autostart.AutoStartActivity"},
+          {"component": "com.asus.mobilemanager/com.asus.mobilemanager.powersaver.PowerSaverSettings"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "background_activity": [
+          {"component": "com.asus.mobilemanager/com.asus.mobilemanager.powersaver.PowerSaverSettings"},
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    },
+    {
+      "id": "generic",
+      "display_name": "Other Android manufacturer",
+      "manufacturer_keys": ["generic", "other"],
+      "dontkillmyapp_url": "https://dontkillmyapp.com/",
+      "notes": "Unknown manufacturer. Use the standard Android battery-optimisation exemption and app-details screen, then look up the maker on dontkillmyapp.com. The app records only what the OS verifies or what you explicitly confirm.",
+      "steps": {
+        "autostart": [
+          "Open Settings → Apps → ForestEar Node.",
+          "Look for Auto-start, Startup manager or App launch and allow ForestEar Node."
+        ],
+        "battery": [
+          "Open Settings → Battery → Battery optimisation → All apps → ForestEar Node → Don't optimise."
+        ],
+        "background_activity": [
+          "Open Settings → Apps → ForestEar Node → Battery → Unrestricted / Allow background activity."
+        ],
+        "recents": [
+          "Open Recents, long-press the ForestEar Node card, tap the lock icon if available."
+        ],
+        "overlay": [
+          "Open Settings → Apps → Special app access → Display over other apps → ForestEar Node."
+        ],
+        "charge_limit": [
+          "Open Settings → Battery and look for a charging limit or battery protection option."
+        ],
+        "battery_health": [
+          "Inspect the battery for swelling and replace it if deformed or rapidly degrading."
+        ]
+      },
+      "intents": {
+        "autostart": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "background_activity": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ],
+        "battery": [
+          {"action": "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "data": "package:{package}"},
+          {"action": "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS"}
+        ],
+        "overlay": [
+          {"action": "android.settings.action.MANAGE_OVERLAY_PERMISSION", "data": "package:{package}"}
+        ],
+        "charge_limit": [
+          {"action": "android.settings.APPLICATION_DETAILS_SETTINGS", "data": "package:{package}"}
+        ]
+      }
+    }
+  ],
+  "known_devices": [
+    {
+      "model_pattern": "CPH2381|Nord CE 2 Lite|CPH2409",
+      "manufacturer": "oneplus",
+      "display_name": "OnePlus Nord CE 2 Lite 5G",
+      "notes": "Android 13 / OxygenOS 13. 3.5 mm jack is absent on some variants; a USB-C to TRRS adapter is needed for a wired mic. 5000 mAh battery, non-removable. This is one entry in the table, not a code path.",
+      "tested": false
+    }
+  ]
+}
