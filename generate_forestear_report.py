@@ -347,7 +347,7 @@ S += [
         ["Phone self-test", "14 checks, 0 failed, 6 warnings", "Sensors, permissions, models, network and backend work; the final reinstall used -g, which also granted optional SMS."],
         ["Screen-off continuity", "100% coverage over 303 s, 0 gaps", "Audio analysis continued while the screen was off."],
         ["Recovery", "Swipe PASS; screen-off PASS; mic theft PASS; force-kill FAIL; watchdog FAIL; reboot FAIL", "The app recovers from mic theft and normal background use, but Android 14 blocks restart after a hard stop or boot."],
-        ["24-hour soak", "Old run invalid; fresh run in progress", "The first run lost power after 1 h 29 m. A new 24 h run started 2026-11-18T15:57:24Z; no PASS is claimed yet."],
+        ["Long-duration soak", "23 h 53 m of 24 h target; 17,072 samples", "Stopped at user instruction ~7 min early, so the report records completed_24h=false. No full-day PASS is claimed; inside the run there were no gaps >90 s, charging stayed on, thermal=NONE and governor=NORMAL."],
     ], [34 * mm, 58 * mm, 78 * mm]),
     sp(6),
     callout(
@@ -738,7 +738,7 @@ S += [
         ["Recovery paths", "7 exercised", "Mixed PASS/FAIL", "Kill, swipe, screen-off, reboot, boot receiver, watchdog and microphone theft all exercised on CPH2381."],
         ["Dashboard checks", "Manual + scripted browser checks", "Passed", "Map size, keyed tiles, pins, estimate circle, no console errors, no CDN, fallback behaviour."],
         ["Load test", "2 scenarios", "0 failed requests", "20 virtual nodes at 0.5 s and 2.0 s ingest intervals."],
-        ["24-hour soak", "Old run invalid; new run started 2026-11-18T15:57:24Z", "PENDING", "Battery, thermal, samples, restarts and benchmark over a full day; no final report yet."],
+        ["Long-duration soak", "23 h 53 m (85,997 s), completed_24h=false", "PARTIAL (measured)", "Fresh run started 2026-11-18T15:57:08Z and stopped 2026-11-19T15:50:25Z at user instruction; 17,072 samples, max gap 6.8 s, charging=true throughout, thermal=NONE, governor=NORMAL, battery 80–100%, 21.6–31.1 °C, restarts 1→1."],
     ], [34 * mm, 38 * mm, 30 * mm, 68 * mm]),
     sp(6),
     h2("10.2 Real handset used"),
@@ -904,6 +904,7 @@ S += [
         ["android/device_evidence/watchdog_20261118.log", "Force-stop and 420 s observation: service did not return (FAIL)."],
         ["android/device_evidence/mic_theft_20261118.log", "Zero signal, DEGRADED, 30 s restart and resumed capture (PASS)."],
         ["android/device_evidence/soak/20261118-210215/", "Invalid partial soak: 1 h 29 m, power unplugged, no final report."],
+        ["android/device_evidence/soak/20261119-212027/", "Final powered soak: 23 h 53 m, 17,072 samples, soak_report.json with completed_24h=false; raw samples and battery log."],
         ["android/device_evidence/recovery_paths_CPH2381.json", "Exact recovery outcomes with timestamps, consolidated across both test days."],
         ["android/device_evidence/compatibility_report_CPH2381.md", "Phone-generated compatibility report; canonical device report."],
         ["android/device_evidence/measured_devices.json", "Machine-readable measured-device summary used to generate docs."],
@@ -1009,7 +1010,7 @@ S += [
         ["TDOA clock offsets", "Simulator only", "Real location estimates may be biased.", "Add clock synchronisation or offset estimation."],
         ["Watchdog recovery", "FAIL (recorded)", "The 5-minute watchdog did not restart the service after force-stop.", "Investigate/replace the watchdog; require manual app open until fixed."],
         ["Microphone theft recovery", "PASS (recorded)", "Recovery took a measured 30 s after 10 s of silence; brief DEGRADED window remains.", "Consider shortening the restart delay."],
-        ["24-hour soak", "PENDING (old run invalid)", "Long-duration stability unknown; first run lost power after 1 h 29 m.", "Keep the fresh run powered; pull and review its report after 24 h."],
+        ["Full 24-hour soak", "PARTIAL: 23 h 53 m, completed_24h=false", "The fresh powered run was stopped at user instruction ~7 min short of 24 h; within that window it was stable (no gaps >90 s, no restart, no thermal throttling).", "Repeat to a full 24 h if a complete-day claim is required; no full-day PASS is claimed here."],
         ["Signed release APK", "NOT RUN", "No keystore/passwords supplied; only debug APK built.", "Provide keystore and run build_release.sh + apksigner verify."],
         ["Emulator matrix", "NOT RUN", "No emulator/system images installed.", "Install tooling and run emulator_matrix.sh."],
         ["Backend security", "Development posture", "Default token, no TLS, single-process SQLite, no per-user auth.", "Add TLS, real auth, hardened DB before deployment."],
@@ -1021,7 +1022,7 @@ S += [
     callout(
         "What the project does NOT claim",
         "It does not claim real-forest accuracy, production security, successful Telegram/SMS delivery, successful reboot recovery, "
-        "a finished 24-hour soak, or validated localisation with real clock drift. Each of these is either pending or explicitly failed in the evidence.",
+        "a completed 24-hour soak (the final powered run reached 23 h 53 m), or validated localisation with real clock drift. Each of these is either partial, pending or explicitly failed in the evidence.",
         "red",
     ),
 ]
@@ -1030,14 +1031,14 @@ S += [
 S += [
     h1("15. Prioritised future work"),
     numbered([
-        "Pull and review the 24-hour soak report; investigate any restart, thermal throttling or sample gaps.",
+        "Repeat the soak to a full 24 h; the latest report stopped at 23 h 53 m with no gaps, restarts or thermal throttling observed.",
         "Rotate and domain-restrict the exposed CARTO key before any deployment or publication.",
         "Fix M6 with better normal-data training. Simply masking it from M9 was measured and did not improve the system overall.",
         "Improve weather classification with locally labelled rain/wind/thunder data and retest the veto.",
         "Run a labelled field trial and report real precision/recall, not just internal test metrics.",
         "Add clock synchronisation or offset estimation so TDOA works on unsynchronised real nodes.",
         "Test real Telegram and SMS delivery with controlled credentials and a real SIM.",
-        "Exercise watchdog and microphone-theft recovery paths and record the outcomes.",
+        "Fix the watchdog restart path (measured FAIL after force-stop); microphone-theft recovery already measured PASS with a 30 s restart.",
         "Produce a signed release APK after receiving keystore credentials and verify it with apksigner.",
         "Install emulator tooling and complete the Android 8–15 compatibility matrix.",
         "Harden the backend: TLS, per-node keys, audit logging, retention policy and a production database.",
