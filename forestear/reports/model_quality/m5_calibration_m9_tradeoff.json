@@ -1,0 +1,20 @@
+{
+  "_meta": "Measured while evaluating a fixed log-probability bias on M5 weather probabilities. Validation was used to select the bias; the held-out test split was used once. Numbers were read from make eval / a scratch retrain that mirrored the deployed LightGBM protocol. Nothing here was deployed.",
+  "bias_log_probability": [-1.5, -2.0, -2.0, 0.0],
+  "m5_weather_macro_f1": {
+    "baseline": 0.5761,
+    "calibrated": 0.6728,
+    "split": "held-out test (6,612 windows)"
+  },
+  "m9_deployed_model": {
+    "on_raw_m5_features": {"macro_f1": 0.8186, "accuracy": 0.82},
+    "on_calibrated_m5_features": {"macro_f1": 0.8079, "accuracy": 0.8091},
+    "note": "Same trained m9_lgbm.pkl; only M5 inputs changed. Applying the post-hoc bias to features the model was not trained on degrades it."
+  },
+  "m9_retrained_on_calibrated_features": {
+    "macro_f1": 0.8199,
+    "accuracy": 0.8138,
+    "note": "Scratch retrain using the exact deployed protocol (OOF val, 75/25 stratified split, per-class isotonic calibration, 300 trees). Macro-F1 +0.0013 vs deployed; accuracy -0.0062 vs deployed. No clear net gain."
+  },
+  "decision": "NOT ADOPTED. The M5 standalone gain is real, but it does not transfer to the deployed M9 classifier: applying the bias to M9 inputs regresses macro-F1 to 0.8079, and retraining M9 is a wash (0.8199 / 0.8138 vs 0.8186 / 0.8200). Deploying the bias would also require a matched change in the Android app and a full evidence/PDF cascade for a marginal result. Deployed artifacts are unchanged."
+}

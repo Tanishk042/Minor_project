@@ -1,0 +1,32 @@
+# ForestEar backend image: FastAPI + dashboard + correlator.
+# Deliberately lightweight: backend/ imports neither TensorFlow nor pandas, so
+# this image uses docker/requirements.backend.txt (~60 MB of wheels) instead of
+# the full training stack. The edge-agent image is docker/Dockerfile.edge.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY docker/requirements.backend.txt ./requirements.backend.txt
+RUN pip install -r requirements.backend.txt
+
+COPY common/ common/
+COPY backend/ backend/
+COPY configs/ configs/
+COPY dashboard/ dashboard/
+
+# non-root
+RUN useradd -m forestear \
+    && mkdir -p /app/data /app/reports \
+    && chown -R forestear /app
+USER forestear
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+
+CMD ["python", "-m", "backend.main", "--host", "0.0.0.0", "--port", "8000"]

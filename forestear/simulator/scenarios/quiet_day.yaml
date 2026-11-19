@@ -1,0 +1,6 @@
+# ForestEar scenario (auto-generated, hand-tunable)
+duration_s: 120
+ambience:
+  kind: birds
+  level_db: 35
+sources: []

@@ -1,0 +1,26 @@
+# ForestEar edge-node image: agent + TFLite models, no training deps.
+# Train on the host (make train && make export), then mount/copy artifacts:
+#   docker build -t forestear-edge -f docker/Dockerfile.edge .
+#   docker run -e FORESTEAR_BACKEND_URL=http://backend:8000 forestear-edge
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir tensorflow-cpu==2.18.0 || \
+    pip install --no-cache-dir tensorflow==2.18.0
+
+COPY common/ common/
+COPY configs/ configs/
+COPY ml/ ml/
+COPY edge_agent/ edge_agent/
+
+# non-root
+RUN useradd -m forestear && chown -R forestear /app
+USER forestear
+
+ENV FORESTEAR_BACKEND_URL=http://backend:8000
+
+# default: replay nothing; override CMD with the mic agent on real hardware
+CMD ["python", "edge_agent/agent.py", "--mode", "file", "--path", "data/"]

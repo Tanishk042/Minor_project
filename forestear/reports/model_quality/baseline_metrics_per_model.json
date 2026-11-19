@@ -1,0 +1,359 @@
+{
+  "_meta": {
+    "split": "test",
+    "n_windows": 6612,
+    "class_counts": {
+      "chainsaw": 152,
+      "gunshot": 472,
+      "vehicle": 1692,
+      "human": 1608,
+      "benign": 2688
+    },
+    "note": "all metrics measured on the held-out test split"
+  },
+  "m9_fusion_calibrated": {
+    "per_class": {
+      "chainsaw": {
+        "precision": 0.9043,
+        "recall": 0.6842,
+        "f1": 0.779,
+        "support": 152,
+        "tp": 104,
+        "fp": 11,
+        "fn": 48
+      },
+      "gunshot": {
+        "precision": 0.8953,
+        "recall": 0.8517,
+        "f1": 0.873,
+        "support": 472,
+        "tp": 402,
+        "fp": 47,
+        "fn": 70
+      },
+      "vehicle": {
+        "precision": 0.8428,
+        "recall": 0.8747,
+        "f1": 0.8585,
+        "support": 1692,
+        "tp": 1480,
+        "fp": 276,
+        "fn": 212
+      },
+      "human": {
+        "precision": 0.7849,
+        "recall": 0.7351,
+        "f1": 0.7592,
+        "support": 1608,
+        "tp": 1182,
+        "fp": 324,
+        "fn": 426
+      },
+      "benign": {
+        "precision": 0.809,
+        "recall": 0.8385,
+        "f1": 0.8235,
+        "support": 2688,
+        "tp": 2254,
+        "fp": 532,
+        "fn": 434
+      }
+    },
+    "accuracy": 0.82,
+    "macro_f1": 0.8186,
+    "n": 6612
+  },
+  "m9_mlp_alternative": {
+    "per_class": {
+      "chainsaw": {
+        "precision": 0.7215,
+        "recall": 0.75,
+        "f1": 0.7355,
+        "support": 152,
+        "tp": 114,
+        "fp": 44,
+        "fn": 38
+      },
+      "gunshot": {
+        "precision": 0.9218,
+        "recall": 0.8242,
+        "f1": 0.8702,
+        "support": 472,
+        "tp": 389,
+        "fp": 33,
+        "fn": 83
+      },
+      "vehicle": {
+        "precision": 0.8264,
+        "recall": 0.8723,
+        "f1": 0.8488,
+        "support": 1692,
+        "tp": 1476,
+        "fp": 310,
+        "fn": 216
+      },
+      "human": {
+        "precision": 0.7082,
+        "recall": 0.7351,
+        "f1": 0.7214,
+        "support": 1608,
+        "tp": 1182,
+        "fp": 487,
+        "fn": 426
+      },
+      "benign": {
+        "precision": 0.785,
+        "recall": 0.7526,
+        "f1": 0.7685,
+        "support": 2688,
+        "tp": 2023,
+        "fp": 554,
+        "fn": 665
+      }
+    },
+    "accuracy": 0.784,
+    "macro_f1": 0.7889,
+    "n": 6612
+  },
+  "baseline_majority": {
+    "per_class": {
+      "chainsaw": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 152,
+        "tp": 0,
+        "fp": 0,
+        "fn": 152
+      },
+      "gunshot": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 472,
+        "tp": 0,
+        "fp": 0,
+        "fn": 472
+      },
+      "vehicle": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 1692,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1692
+      },
+      "human": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 1608,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1608
+      },
+      "benign": {
+        "precision": 0.4065,
+        "recall": 1.0,
+        "f1": 0.5781,
+        "support": 2688,
+        "tp": 2688,
+        "fp": 3924,
+        "fn": 0
+      }
+    },
+    "accuracy": 0.4065,
+    "macro_f1": 0.1156,
+    "n": 6612,
+    "note": "predicts the most frequent test class always"
+  },
+  "baseline_handcrafted_lr": {
+    "per_class": {
+      "chainsaw": {
+        "precision": 0.1015,
+        "recall": 0.6579,
+        "f1": 0.1759,
+        "support": 152,
+        "tp": 100,
+        "fp": 885,
+        "fn": 52
+      },
+      "gunshot": {
+        "precision": 0.2411,
+        "recall": 0.4301,
+        "f1": 0.309,
+        "support": 472,
+        "tp": 203,
+        "fp": 639,
+        "fn": 269
+      },
+      "vehicle": {
+        "precision": 0.396,
+        "recall": 0.4793,
+        "f1": 0.4337,
+        "support": 1692,
+        "tp": 811,
+        "fp": 1237,
+        "fn": 881
+      },
+      "human": {
+        "precision": 0.3381,
+        "recall": 0.4571,
+        "f1": 0.3887,
+        "support": 1608,
+        "tp": 735,
+        "fp": 1439,
+        "fn": 873
+      },
+      "benign": {
+        "precision": 0.6679,
+        "recall": 0.1399,
+        "f1": 0.2313,
+        "support": 2688,
+        "tp": 376,
+        "fp": 187,
+        "fn": 2312
+      }
+    },
+    "accuracy": 0.3365,
+    "macro_f1": 0.3077,
+    "n": 6612,
+    "note": "6 handcrafted features -> logistic regression (no DL)"
+  },
+  "baseline_yamnet_only": {
+    "per_class": {
+      "chainsaw": {
+        "precision": 0.625,
+        "recall": 0.0329,
+        "f1": 0.0625,
+        "support": 152,
+        "tp": 5,
+        "fp": 3,
+        "fn": 147
+      },
+      "gunshot": {
+        "precision": 0.6183,
+        "recall": 0.3157,
+        "f1": 0.418,
+        "support": 472,
+        "tp": 149,
+        "fp": 92,
+        "fn": 323
+      },
+      "vehicle": {
+        "precision": 0.5322,
+        "recall": 0.5999,
+        "f1": 0.564,
+        "support": 1692,
+        "tp": 1015,
+        "fp": 892,
+        "fn": 677
+      },
+      "human": {
+        "precision": 0.3258,
+        "recall": 0.8277,
+        "f1": 0.4676,
+        "support": 1608,
+        "tp": 1331,
+        "fp": 2754,
+        "fn": 277
+      },
+      "benign": {
+        "precision": 0.5849,
+        "recall": 0.0807,
+        "f1": 0.1419,
+        "support": 2688,
+        "tp": 217,
+        "fp": 154,
+        "fn": 2471
+      }
+    },
+    "accuracy": 0.4109,
+    "macro_f1": 0.3308,
+    "n": 6612,
+    "note": "YAMNet selected-score argmax with hand class mapping"
+  },
+  "m2_gunshot": {
+    "ap": 0.7694,
+    "auroc": 0.9379,
+    "f1_at_thresholds_0.3-0.8": [
+      0.4029,
+      0.5627,
+      0.6555,
+      0.6979,
+      0.6979,
+      0.6257,
+      0.3993
+    ],
+    "operating_threshold": 0.6,
+    "n_pos": 472,
+    "n": 6612
+  },
+  "m3_chainsaw": {
+    "ap": 0.6701,
+    "auroc": 0.9557,
+    "f1_at_thresholds_0.3-0.8": [
+      0.3287,
+      0.3634,
+      0.4046,
+      0.4457,
+      0.4046,
+      0.4846,
+      0.5258
+    ],
+    "operating_threshold": 0.5,
+    "n_pos": 152,
+    "n": 6612
+  },
+  "m4_vehicle": {
+    "ap": 0.7051,
+    "auroc": 0.8221,
+    "f1_at_thresholds_0.3-0.8": [
+      0.5581,
+      0.5907,
+      0.6079,
+      0.6005,
+      0.6079,
+      0.5861,
+      0.57
+    ],
+    "operating_threshold": 0.5,
+    "n_pos": 1692,
+    "n": 6612
+  },
+  "m7_human": {
+    "ap": 0.6561,
+    "auroc": 0.7994,
+    "f1_at_thresholds_0.3-0.8": [
+      0.5047,
+      0.5243,
+      0.5457,
+      0.5714,
+      0.5714,
+      0.5725,
+      0.5362
+    ],
+    "operating_threshold": 0.6,
+    "n_pos": 1608,
+    "n": 6612
+  },
+  "m5_weather": {
+    "macro_f1": 0.5761,
+    "per_class_f1": {
+      "rain": 0.5217,
+      "wind": 0.3606,
+      "thunder": 0.4922,
+      "quiet": 0.9299
+    },
+    "note": "quiet = all non-weather windows",
+    "n": 6612
+  },
+  "m6_anomaly": {
+    "auroc_threat_vs_benign": 0.482,
+    "median_z_benign": -0.094,
+    "median_z_threat": -0.2,
+    "threshold": 0.7,
+    "n": 6612
+  }
+}

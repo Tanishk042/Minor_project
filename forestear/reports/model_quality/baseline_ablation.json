@@ -1,0 +1,362 @@
+{
+  "_meta": {
+    "method": "LightGBM retrained on OOF(val) features with the feature group zeroed (train AND test), following the deployed protocol (75/25 stratified split, isotonic calibration on the held-out 25%); evaluated on test",
+    "reference": "full_ensemble = M9 as deployed",
+    "rows_note": "rows carry macro-F1 and are mutually comparable; single-model detection baselines (AP/AUROC, different metric) are reported separately"
+  },
+  "rows": [
+    {
+      "name": "full_ensemble",
+      "accuracy": 0.82,
+      "macro_f1": 0.8186
+    },
+    {
+      "name": "no_m1_scores",
+      "accuracy": 0.8019,
+      "macro_f1": 0.8142
+    },
+    {
+      "name": "no_temporal_context",
+      "accuracy": 0.6639,
+      "macro_f1": 0.6657
+    },
+    {
+      "name": "no_handcrafted",
+      "accuracy": 0.8049,
+      "macro_f1": 0.8121
+    },
+    {
+      "name": "no_calibration",
+      "accuracy": 0.8202,
+      "macro_f1": 0.8189
+    }
+  ],
+  "single_model_detections": {
+    "m3_chainsaw_only": {
+      "ap": 0.6701,
+      "auroc": 0.9557,
+      "f1_at_thresholds_0.3-0.8": [
+        0.3287,
+        0.3634,
+        0.4046,
+        0.4457,
+        0.4046,
+        0.4846,
+        0.5258
+      ],
+      "operating_threshold": 0.5,
+      "n_pos": 152,
+      "n": 6612
+    },
+    "m2_gunshot_only": {
+      "ap": 0.7694,
+      "auroc": 0.9379,
+      "f1_at_thresholds_0.3-0.8": [
+        0.4029,
+        0.5627,
+        0.6555,
+        0.6979,
+        0.6979,
+        0.6257,
+        0.3993
+      ],
+      "operating_threshold": 0.6,
+      "n_pos": 472,
+      "n": 6612
+    }
+  },
+  "detail": {
+    "full_ensemble": {
+      "per_class": {
+        "chainsaw": {
+          "precision": 0.9043,
+          "recall": 0.6842,
+          "f1": 0.779,
+          "support": 152,
+          "tp": 104,
+          "fp": 11,
+          "fn": 48
+        },
+        "gunshot": {
+          "precision": 0.8953,
+          "recall": 0.8517,
+          "f1": 0.873,
+          "support": 472,
+          "tp": 402,
+          "fp": 47,
+          "fn": 70
+        },
+        "vehicle": {
+          "precision": 0.8428,
+          "recall": 0.8747,
+          "f1": 0.8585,
+          "support": 1692,
+          "tp": 1480,
+          "fp": 276,
+          "fn": 212
+        },
+        "human": {
+          "precision": 0.7849,
+          "recall": 0.7351,
+          "f1": 0.7592,
+          "support": 1608,
+          "tp": 1182,
+          "fp": 324,
+          "fn": 426
+        },
+        "benign": {
+          "precision": 0.809,
+          "recall": 0.8385,
+          "f1": 0.8235,
+          "support": 2688,
+          "tp": 2254,
+          "fp": 532,
+          "fn": 434
+        }
+      },
+      "accuracy": 0.82,
+      "macro_f1": 0.8186,
+      "n": 6612
+    },
+    "no_m1_scores": {
+      "per_class": {
+        "chainsaw": {
+          "precision": 0.8898,
+          "recall": 0.7434,
+          "f1": 0.81,
+          "support": 152,
+          "tp": 113,
+          "fp": 14,
+          "fn": 39
+        },
+        "gunshot": {
+          "precision": 0.8951,
+          "recall": 0.8496,
+          "f1": 0.8717,
+          "support": 472,
+          "tp": 401,
+          "fp": 47,
+          "fn": 71
+        },
+        "vehicle": {
+          "precision": 0.8179,
+          "recall": 0.8948,
+          "f1": 0.8546,
+          "support": 1692,
+          "tp": 1514,
+          "fp": 337,
+          "fn": 178
+        },
+        "human": {
+          "precision": 0.7082,
+          "recall": 0.7848,
+          "f1": 0.7445,
+          "support": 1608,
+          "tp": 1262,
+          "fp": 520,
+          "fn": 346
+        },
+        "benign": {
+          "precision": 0.8369,
+          "recall": 0.7485,
+          "f1": 0.7903,
+          "support": 2688,
+          "tp": 2012,
+          "fp": 392,
+          "fn": 676
+        }
+      },
+      "accuracy": 0.8019,
+      "macro_f1": 0.8142,
+      "n": 6612
+    },
+    "no_temporal_context": {
+      "per_class": {
+        "chainsaw": {
+          "precision": 0.7015,
+          "recall": 0.6184,
+          "f1": 0.6573,
+          "support": 152,
+          "tp": 94,
+          "fp": 40,
+          "fn": 58
+        },
+        "gunshot": {
+          "precision": 0.8858,
+          "recall": 0.6081,
+          "f1": 0.7211,
+          "support": 472,
+          "tp": 287,
+          "fp": 37,
+          "fn": 185
+        },
+        "vehicle": {
+          "precision": 0.6911,
+          "recall": 0.6915,
+          "f1": 0.6913,
+          "support": 1692,
+          "tp": 1170,
+          "fp": 523,
+          "fn": 522
+        },
+        "human": {
+          "precision": 0.6188,
+          "recall": 0.528,
+          "f1": 0.5698,
+          "support": 1608,
+          "tp": 849,
+          "fp": 523,
+          "fn": 759
+        },
+        "benign": {
+          "precision": 0.6442,
+          "recall": 0.7403,
+          "f1": 0.6889,
+          "support": 2688,
+          "tp": 1990,
+          "fp": 1099,
+          "fn": 698
+        }
+      },
+      "accuracy": 0.6639,
+      "macro_f1": 0.6657,
+      "n": 6612
+    },
+    "no_handcrafted": {
+      "per_class": {
+        "chainsaw": {
+          "precision": 0.8397,
+          "recall": 0.7237,
+          "f1": 0.7774,
+          "support": 152,
+          "tp": 110,
+          "fp": 21,
+          "fn": 42
+        },
+        "gunshot": {
+          "precision": 0.9284,
+          "recall": 0.8517,
+          "f1": 0.8884,
+          "support": 472,
+          "tp": 402,
+          "fp": 31,
+          "fn": 70
+        },
+        "vehicle": {
+          "precision": 0.8335,
+          "recall": 0.8877,
+          "f1": 0.8598,
+          "support": 1692,
+          "tp": 1502,
+          "fp": 300,
+          "fn": 190
+        },
+        "human": {
+          "precision": 0.7189,
+          "recall": 0.7556,
+          "f1": 0.7368,
+          "support": 1608,
+          "tp": 1215,
+          "fp": 475,
+          "fn": 393
+        },
+        "benign": {
+          "precision": 0.8189,
+          "recall": 0.7786,
+          "f1": 0.7982,
+          "support": 2688,
+          "tp": 2093,
+          "fp": 463,
+          "fn": 595
+        }
+      },
+      "accuracy": 0.8049,
+      "macro_f1": 0.8121,
+      "n": 6612
+    },
+    "no_calibration": {
+      "per_class": {
+        "chainsaw": {
+          "precision": 0.8397,
+          "recall": 0.7237,
+          "f1": 0.7774,
+          "support": 152,
+          "tp": 110,
+          "fp": 21,
+          "fn": 42
+        },
+        "gunshot": {
+          "precision": 0.8938,
+          "recall": 0.8559,
+          "f1": 0.8745,
+          "support": 472,
+          "tp": 404,
+          "fp": 48,
+          "fn": 68
+        },
+        "vehicle": {
+          "precision": 0.8467,
+          "recall": 0.8717,
+          "f1": 0.8591,
+          "support": 1692,
+          "tp": 1475,
+          "fp": 267,
+          "fn": 217
+        },
+        "human": {
+          "precision": 0.7838,
+          "recall": 0.7394,
+          "f1": 0.761,
+          "support": 1608,
+          "tp": 1189,
+          "fp": 328,
+          "fn": 419
+        },
+        "benign": {
+          "precision": 0.8105,
+          "recall": 0.8352,
+          "f1": 0.8226,
+          "support": 2688,
+          "tp": 2245,
+          "fp": 525,
+          "fn": 443
+        }
+      },
+      "accuracy": 0.8202,
+      "macro_f1": 0.8189,
+      "n": 6612
+    },
+    "m3_chainsaw_only": {
+      "ap": 0.6701,
+      "auroc": 0.9557,
+      "f1_at_thresholds_0.3-0.8": [
+        0.3287,
+        0.3634,
+        0.4046,
+        0.4457,
+        0.4046,
+        0.4846,
+        0.5258
+      ],
+      "operating_threshold": 0.5,
+      "n_pos": 152,
+      "n": 6612
+    },
+    "m2_gunshot_only": {
+      "ap": 0.7694,
+      "auroc": 0.9379,
+      "f1_at_thresholds_0.3-0.8": [
+        0.4029,
+        0.5627,
+        0.6555,
+        0.6979,
+        0.6979,
+        0.6257,
+        0.3993
+      ],
+      "operating_threshold": 0.6,
+      "n_pos": 472,
+      "n": 6612
+    }
+  }
+}

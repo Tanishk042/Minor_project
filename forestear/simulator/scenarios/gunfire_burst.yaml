@@ -1,0 +1,16 @@
+# ForestEar scenario (auto-generated, hand-tunable)
+duration_s: 90
+ambience:
+  kind: birds
+  level_db: 33
+sources:
+- id: gun1
+  class: gunshot
+  clip_pool: synthetic   # single sharp impulse every 10 s -> unambiguous TDOA
+  # Active 20-80 s so the 10 s synthetic impulse grid yields six shots
+  # (21, 31, ... 71 s) for multi-node localisation, then ramps to silence.
+  trajectory:
+  - [20.0, 12.971600, 77.594600, 105.0]
+  - [21.0, 12.971600, 77.594600, 105.0]
+  - [79.0, 12.971600, 77.594600, 105.0]
+  - [80.0, 12.971600, 77.594600, 0.0]

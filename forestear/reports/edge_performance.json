@@ -1,0 +1,85 @@
+[
+  {
+    "model": "m2_gunshot",
+    "quant": "int8",
+    "kb": 28,
+    "latency_ms": 0.26,
+    "parity_max_abs": 0.0598,
+    "parity_mean_abs": 0.0169,
+    "parity_corr": 0.9268
+  },
+  {
+    "model": "m5_weather",
+    "quant": "float16",
+    "kb": 29,
+    "latency_ms": 0.37,
+    "parity_max_abs": 0.0024,
+    "parity_mean_abs": 0.0002,
+    "parity_corr": 0.1769
+  },
+  {
+    "model": "m6_anomaly",
+    "quant": "float16",
+    "kb": 319,
+    "latency_ms": 1.1,
+    "parity_max_abs": 0.0017,
+    "parity_mean_abs": 0.0001,
+    "parity_corr": 1.0
+  },
+  {
+    "model": "m3_chainsaw",
+    "quant": "float16",
+    "kb": 579,
+    "latency_ms": 0.03,
+    "parity_max_abs": 0.0,
+    "parity_mean_abs": 0.0,
+    "parity_corr": 1.0
+  },
+  {
+    "model": "m4_vehicle",
+    "quant": "float16",
+    "kb": 579,
+    "latency_ms": 0.03,
+    "parity_max_abs": 0.0,
+    "parity_mean_abs": 0.0,
+    "parity_corr": 1.0
+  },
+  {
+    "model": "m7_human",
+    "quant": "float16",
+    "kb": 583,
+    "latency_ms": 0.03,
+    "parity_max_abs": 0.0,
+    "parity_mean_abs": 0.0,
+    "parity_corr": 1.0
+  },
+  {
+    "model": "m9_fusion_mlp",
+    "quant": "float16",
+    "kb": 13,
+    "latency_ms": 0.004
+  },
+  {
+    "model": "m9_fusion_lgbm",
+    "quant": "none (python)",
+    "latency_ms": 0.704
+  },
+  {
+    "model": "m1_yamnet_tflite",
+    "quant": "as-is",
+    "kb": 4030,
+    "latency_ms": 3.04
+  },
+  {
+    "model": "m8_birdnet",
+    "quant": "int8-as-is",
+    "kb": 40101,
+    "latency_ms": 29.32
+  },
+  {
+    "model": "TOTAL (deployed edge path, per hop)",
+    "latency_ms": 5.56,
+    "target_ms": 250,
+    "meets_target": true
+  }
+]

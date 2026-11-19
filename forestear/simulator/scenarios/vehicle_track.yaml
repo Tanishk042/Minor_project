@@ -1,0 +1,38 @@
+# ForestEar scenario (auto-generated, hand-tunable)
+duration_s: 140
+ambience:
+  kind: birds
+  level_db: 33
+sources:
+- id: veh1
+  class: vehicle
+  clip_select: sustained    # pick a continuous engine clip (not a pass-by with silence)
+  trajectory:
+  - - 15.0
+    - 12.9716
+    - 77.589063
+    - 90.0
+  - - 33.3
+    - 12.9716
+    - 77.590986
+    - 90.0
+  - - 51.7
+    - 12.9716
+    - 77.592908
+    - 90.0
+  - - 70.0
+    - 12.9716
+    - 77.594831
+    - 90.0
+  - - 88.3
+    - 12.9716
+    - 77.596754
+    - 90.0
+  - - 106.7
+    - 12.9716
+    - 77.598676
+    - 90.0
+  - - 125.0
+    - 12.9716
+    - 77.600599
+    - 90.0

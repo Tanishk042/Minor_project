@@ -1,0 +1,125 @@
+# ForestEar default configuration.
+# Single source of truth: edge agent, training and simulator all read this file.
+
+audio:
+  sample_rate: 16000        # Hz, everything resampled to this
+  window_s: 1.0             # analysis window length (seconds)
+  hop_s: 0.5                # hop between windows (seconds)
+  clip_s: 5.0               # optional alert clip length (non-speech classes only)
+  silence_rms_db: -60.0     # below this, window counts as silence (skip heavy models)
+  clip_ratio: 0.995         # abs(sample) > clip_ratio counts as clipping
+
+features:
+  n_mels: 64
+  win_ms: 25
+  hop_ms: 10
+  fmin: 50
+  fmax: 7800
+  log_offset: 1.0e-6
+  per_window_norm: true     # per-window (per-clip) normalisation of log-mel
+  yamnet_selected_classes:  # AudioSet class names surfaced into M9 features (verified)
+    - "Chainsaw"
+    - "Gunshot, gunfire"
+    - "Engine"
+    - "Truck"
+    - "Motorcycle"
+    - "Vehicle"
+    - "Speech"
+    - "Shout"
+    - "Thunder"
+    - "Rain"
+    - "Wind"
+    - "Bird vocalization, bird call, bird song"
+
+node:
+  id: "node-01"
+  lat: 12.9716              # default GPS (demo forest area, see README)
+  lon: 77.5946
+  backend_url: "http://127.0.0.1:8000"
+  auth_token: "forestear-dev-token"   # override with FORESTEAR_TOKEN env var
+  heartbeat_s: 30
+  mic_max_retries: 5
+  queue_path: "data/edge_queue.db"
+
+decision:
+  severity:
+    gunshot: "CRITICAL"
+    chainsaw: "WARNING"      # sustained chainsaw escalates to CRITICAL (see below)
+    vehicle: "WARNING"
+    human: "INFO"
+    anomaly: "INFO"
+  # k-of-n persistence: k detections within the last n windows
+  persistence:
+    chainsaw: {k: 3, n: 5}
+    gunshot:  {k: 1, n: 3, high_conf: 0.85}   # 1 window >= high_conf OR k-of-n
+    vehicle:  {k: 3, n: 5}
+    human:    {k: 4, n: 6}
+    anomaly:  {k: 2, n: 3}                   # M6: loud + anomalous 2 windows
+  # per-class cooldown (seconds) to avoid alert storms
+  cooldown_s:
+    chainsaw: 60
+    gunshot: 20
+    vehicle: 120
+    human: 300
+    anomaly: 600
+  # sustained chainsaw escalation: >=k detections within n seconds -> CRITICAL
+  chainsaw_sustain: {k: 8, n: 30}
+  thresholds:                # M9 fused probability above which a class counts as "detected"
+    chainsaw: 0.5
+    gunshot: 0.6
+    vehicle: 0.5
+    human: 0.6
+    anomaly: 0.7             # M6 anomaly z-score threshold
+  weather_veto:
+    enable: true
+    weather_prob: 0.6       # M5 max(rain,wind,thunder) above this ...
+    gunshot_conf: 0.80      # ... and M2/M9 gunshot below this -> suppress gunshot alert
+  temporal_context_windows: 5   # M9 temporal context: last N windows
+
+sim:
+  default_nodes: 4
+  speed_of_sound: 343.0
+  clock_offset_max_s: 0.05  # per-node clock offset injected by the simulator
+  area_center: {lat: 12.9716, lon: 77.5946}
+  area_radius_m: 900
+
+alerts:
+  telegram:
+    enable: false            # set true + env vars TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
+    dry_run: true            # log alert text to console instead of sending
+    # api_base: "https://api.telegram.org"   # override only for tests/mirrors;
+    # TELEGRAM_API_BASE env var takes precedence over this value
+  dedup_window_s: 45         # cross-node dedup window for the same class
+  clip_enable: true          # attach 5 s clips for non-speech classes (never for human)
+
+biodiversity:
+  duty_cycle: 10             # run M8 on 1 in N analysis windows (N=10 -> 10% duty)
+  top_k: 5
+
+anomaly:
+  duty_cycle: 1              # M6 runs every window by default
+  zscore_median_window: 200  # rolling median/MAD baseline length (windows)
+
+export:
+  int8_models: [m2_gunshot, m5_weather]   # quantize to int8; others float16
+  parity_atol: 0.03
+  latency_target_ms: 250
+
+training:
+  seed: 42
+  epochs_small_cnn: 12
+  epochs_mlp: 25
+  batch_size: 32
+  snr_range_db: [-5, 20]
+  val_fraction: 0.15         # only used when dataset provides no folds
+
+dashboard:
+  # Basemap tiles for the Leaflet map (dashboard/app.js), served to the browser
+  # by GET /dashboard-config. Default: CARTO's public light basemap, no key.
+  # For a self-hosted or offline tile server, change tile_url (and attribution).
+  # Environment overrides: FORESTEAR_TILE_URL, FORESTEAR_TILE_ATTRIBUTION,
+  # FORESTEAR_TILE_MAX_ZOOM.
+  tile_url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+  tile_attribution: "&copy; OpenStreetMap &copy; CARTO"
+  tile_max_zoom: 19
+
